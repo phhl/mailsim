@@ -1,0 +1,26 @@
+{
+  "name": "didaktischer-mail-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Geschlossener Mail-Simulator (Node/Express + SQLite) für didaktische Zwecke (To/CC/BCC, Postfächer, Admin-Einsicht).",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "initdb": "node src/tools/initdb.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.6",
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.18.1",
+    "helmet": "^8.0.0",
+    "sanitize-html": "^2.13.0",
+    "zod": "^3.23.8"
+  }
+}

@@ -1,0 +1,20 @@
+<%
+// showSidebar: boolean
+// activeFolder: 'INBOX'|'SENT'|'DRAFTS'|'TRASH'
+const _showSidebar = (typeof showSidebar !== 'undefined') ? !!showSidebar : false;
+const _activeFolder = (typeof activeFolder !== 'undefined') ? activeFolder : null;
+%>
+<div class="page-wrap">
+  <% if (_showSidebar) { %>
+    <div class="layout-columns">
+      <aside class="layout-sidebar">
+        <div class="sidebar-inner">
+          <%- include('sidebar', { activeFolder: _activeFolder }) %>
+        </div>
+      </aside>
+      <main class="layout-main">
+        <div class="main-inner">
+  <% } else { %>
+    <main class="layout-main no-sidebar">
+      <div class="main-inner">
+  <% } %>

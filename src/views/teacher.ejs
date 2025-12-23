@@ -1,0 +1,122 @@
+<%- include('partials/header', { title: 'Lehrkraft', me }) %>
+<%- include('partials/layout_start', { showSidebar: false }) %>
+
+<section class="section">
+  <div class="container is-widescreen">
+    <h1 class="title">Lehrkraft-Bereich</h1>
+
+    <!-- Versandfenster: immer ausgeklappt -->
+    <details open class="box">
+      <summary class="is-clickable">
+        <strong>Versandfenster (Kurs <%= (course && course.name) ? course.name : '—' %>)</strong>
+      </summary>
+      <div class="content mt-4">
+        <% if (sendWindow && sendWindow.is_open) { %>
+          <p><strong>Status:</strong> <span class="tag is-success">OFFEN</span></p>
+          <p>Offen bis: <%= sendWindow.open_until_local || sendWindow.open_until || '—' %></p>
+        <% } else { %>
+          <p><strong>Status:</strong> <span class="tag is-danger">GESCHLOSSEN</span></p>
+        <% } %>
+
+        <form action="/teacher/open-send" method="post" class="field has-addons" style="max-width: 420px;">
+          <div class="control" style="flex: 1;">
+            <input class="input" type="number" min="1" max="240" name="minutes" value="45" required>
+          </div>
+          <div class="control">
+            <button class="button is-link" type="submit">Öffnen (Min.)</button>
+          </div>
+          <div class="control">
+            <a class="button is-warning" href="/teacher/close-send">Schließen</a>
+          </div>
+        </form>
+      </div>
+    </details>
+
+    <!-- CSV Import -->
+    <details class="box">
+      <summary class="is-clickable"><strong>Schülerkonten per CSV importieren</strong></summary>
+      <div class="content mt-4">
+        <form action="/teacher/import-csv" method="post" enctype="multipart/form-data">
+          <div class="field">
+            <label class="label">CSV-Datei</label>
+            <div class="control">
+              <input class="input" type="file" name="csv" accept=".csv" required>
+            </div>
+            <p class="help">Spalten: <code>username,display_name,expires_at</code> (optional: <code>course</code>). Lehrkräfte importieren standardmäßig in ihren Kurs.</p>
+          </div>
+          <button class="button is-primary" type="submit">Importieren</button>
+        </form>
+
+        <% if (createdAccounts && createdAccounts.length) { %>
+          <hr>
+          <h3 class="title is-5">Angelegte Accounts</h3>
+          <p class="help">Die Passwörter werden nur einmalig angezeigt. Exportiere sie jetzt als CSV.</p>
+          <div class="table-container">
+            <table class="table is-striped is-fullwidth">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Anzeigename</th>
+                  <th>Passwort</th>
+                  <th>Ablauf</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% createdAccounts.forEach(a => { %>
+                  <tr>
+                    <td><code><%= a.username %></code></td>
+                    <td><%= a.display_name %></td>
+                    <td><code><%= a.password %></code></td>
+                    <td><%= a.expires_at %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+          <a class="button is-link is-light" href="/teacher/download-created.csv">CSV herunterladen</a>
+        <% } %>
+      </div>
+    </details>
+
+    <!-- Gesendet-Übersicht (kursbezogen, nur SuS, nur SENT) -->
+    <details class="box">
+      <summary class="is-clickable"><strong>Gesendet (nur Schüler:innen, nur SENT)</strong></summary>
+      <div class="content mt-4">
+        <p class="help">Hier siehst du alle von Schüler:innen deines Kurses gesendeten E-Mails. BCC-Empfänger werden angezeigt; in der Schüleransicht bleiben sie verborgen.</p>
+
+        <% if (!sentOverview || !sentOverview.length) { %>
+          <article class="message is-light">
+            <div class="message-body">Noch keine gesendeten E-Mails in diesem Kurs.</div>
+          </article>
+        <% } else { %>
+          <div class="table-container">
+            <table class="table is-fullwidth is-striped">
+              <thead>
+                <tr>
+                  <th>Von</th>
+                  <th>Betreff</th>
+                  <th>Vorschau</th>
+                  <th>Datum</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% sentOverview.forEach(m => { %>
+                  <tr>
+                    <td><%= m.sender_name %> &lt;<%= m.sender_username %>@<%= (course && course.name) ? course.name : 'kurs' %>.bbs-oa.de&gt;</td>
+                    <td><a href="/mail/<%= m.message_id %>?context=teacher"><%= m.subject || '(ohne Betreff)' %></a></td>
+                    <td><%= m.preview || '' %></td>
+                    <td><%= m.created_at_local || m.created_at %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<%- include('partials/layout_end', { showSidebar: false }) %>
+<%- include('partials/footer') %>

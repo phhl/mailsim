@@ -1,0 +1,75 @@
+<%
+  const pageTitle = (typeof mail !== 'undefined' && mail && mail.subject)
+    ? mail.subject
+    : '(ohne Betreff)';
+%>
+<%- include('partials/header', { title: pageTitle, me: me, extraHead: '' }) %>
+
+<%- include('partials/layout_start', { showSidebar: (typeof showSidebar !== 'undefined' ? showSidebar : true), activeFolder: (activeFolder || null) }) %>
+
+<%
+  const isSender = me && mail && Number(me.id) === Number(mail.sender_id);
+  const isStudent = me && me.role === 'student';
+
+  // Normal mail behavior:
+  // - Recipients must never see who was BCC'ed.
+  // - The sender may see their own BCC list (but we don't need to label it as BCC).
+  // - Teachers/Admins may inspect BCC for the course/admin views.
+  const toList = [...(recipients.to || [])];
+  const ccList = [...(recipients.cc || [])];
+  const bccList = [...(recipients.bcc || [])];
+
+  const showBccRow = !isStudent && (bccList.length > 0);
+  const mergedToList = (isStudent && isSender) ? [...toList, ...bccList] : toList;
+%>
+
+<div class="columns is-variable is-6">
+      <!-- Main content -->
+      <div class="column is-8">
+        <div class="level mb-4">
+          <div class="level-left">
+            <div>
+              <h1 class="title is-3 mb-2"><%= mail.subject || '(ohne Betreff)' %></h1>
+              <p class="has-text-grey"><%= mail.created_at_local || mail.created_at || '' %></p>
+            </div>
+          </div>
+          <div class="level-right">
+            <div class="buttons">
+              <a class="button is-light" href="/compose?replyTo=<%= mail.id %>">Antworten</a>
+              <a class="button is-light" href="/compose?replyAllTo=<%= mail.id %>">Allen antworten</a>
+              <a class="button is-light" href="/compose?forward=<%= mail.id %>">Weiterleiten</a>
+              <a class="button is-light" href="/compose">Neu</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="box">
+          <% 
+            // Prefer stored HTML, but strip script tags defensively.
+            const safeHtml = (mail && mail.body_html) ? String(mail.body_html).replace(/<script[\s\S]*?<\/script>/gi, '') : '';
+            const safeText = (mail && mail.body_text) ? String(mail.body_text) : '';
+          %>
+          <% if (safeHtml) { %>
+            <div class="content"><%- safeHtml %></div>
+          <% } else { %>
+            <div class="content" style="white-space: pre-wrap;"><%= safeText %></div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Metadata -->
+      <div class="column is-4">
+        <div class="box">
+          <p><strong>Von:</strong> <%= mail.sender_display_name || mail.sender_email %></p>
+          <p><strong>An:</strong> <%= mergedToList.join(', ') || '—' %></p>
+          <p><strong>CC:</strong> <%= ccList.join(', ') || '—' %></p>
+          <% if (showBccRow) { %>
+            <p><strong>BCC:</strong> <%= bccList.join(', ') || '—' %></p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+</div>
+
+<%- include('partials/layout_end') %>
+<%- include('partials/footer') %>

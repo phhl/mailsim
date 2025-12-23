@@ -1,0 +1,124 @@
+/* app.css (v18) - clean, minimal overrides on top of Bulma
+   Goal: stable layout (sidebar + content), readable whitespace, no accumulated legacy rules.
+*/
+
+/* --- Base --- */
+:root{
+  --navbar-h: 52px;
+  --sidebar-w: 248px;
+  --gutter: 28px;
+  --page-pad-x: 32px;
+  --page-pad-y: 24px;
+  --content-max: 1100px;
+  --content-max-admin: 1050px;
+  --border: #e6e6e6;
+  --sidebar-bg: #f7f7f7;
+}
+
+html, body { height: 100%; }
+body { background: #fff; }
+.navbar { border-bottom: 1px solid var(--border); }
+
+/* --- Layout wrapper --- */
+.page-wrap { min-height: calc(100vh - var(--navbar-h)); }
+
+/* Mail layout: sidebar + main */
+.layout-columns{
+  display:flex;
+  align-items:stretch;
+  min-height: calc(100vh - var(--navbar-h));
+}
+
+.layout-sidebar{
+  width: var(--sidebar-w);
+  flex: 0 0 var(--sidebar-w);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-inner{
+  padding: 16px;
+  position: sticky;
+  top: var(--navbar-h);
+  height: calc(100vh - var(--navbar-h));
+  overflow: auto;
+}
+
+/* Main content area */
+.layout-main{
+  flex: 1 1 auto;
+  padding: var(--page-pad-y) var(--page-pad-x);
+  /* whitespace between sidebar and content */
+  padding-left: calc(var(--page-pad-x) + var(--gutter));
+}
+
+.layout-main.no-sidebar{
+  padding: calc(var(--page-pad-y) + 6px) calc(var(--page-pad-x) + 8px);
+}
+
+.main-inner{
+  max-width: var(--content-max);
+  margin: 0 auto;
+}
+
+.layout-main.no-sidebar .main-inner{
+  max-width: var(--content-max-admin);
+}
+
+/* --- Rhythm / spacing --- */
+.main-inner > .title { margin-bottom: .75rem; }
+.main-inner > .subtitle { margin-top: -0.25rem; margin-bottom: 1rem; }
+
+.box { padding: 1.25rem; }
+.box + .box { margin-top: 1.25rem; }
+
+hr { margin: 1.25rem 0; }
+
+.field:not(:last-child) { margin-bottom: .9rem; }
+.buttons { margin-top: .75rem; }
+.button + .button { margin-left: .5rem; }
+
+/* Tables: keep them readable */
+.table-wrap{
+  overflow:auto;
+  border: 1px solid #eee;
+  border-radius: 6px;
+}
+.table { margin-bottom: 0; }
+.table thead th{
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+.mail-list td, .mail-list th{ padding-top:.55rem; padding-bottom:.55rem; }
+
+/* --- Compose form: ensure spacing between columns --- */
+.compose-grid .columns{ margin-left: -0.5rem; margin-right: -0.5rem; }
+.compose-grid .column{ padding-left: 0.5rem; padding-right: 0.5rem; }
+
+/* --- Responsive --- */
+@media (max-width: 1024px){
+  :root{
+    --sidebar-w: 220px;
+    --gutter: 18px;
+    --page-pad-x: 20px;
+    --page-pad-y: 18px;
+  }
+}
+
+@media (max-width: 768px){
+  .layout-columns{ display:block; }
+  .layout-sidebar{
+    width:auto;
+    max-width:none;
+    border-right:none;
+    border-bottom:1px solid var(--border);
+  }
+  .sidebar-inner{
+    position: static;
+    height: auto;
+  }
+  .layout-main{ padding-left: var(--page-pad-x); }
+  .main-inner{ max-width:none; }
+}

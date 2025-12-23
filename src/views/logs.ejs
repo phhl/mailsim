@@ -1,0 +1,36 @@
+<%- include('partials/header', { title: 'Protokoll', me, extraHead: '' }) %>
+<%- include('partials/layout_start', { showSidebar: false, activeFolder: 'INBOX' }) %>
+
+<h1 class="title is-4">Protokoll (wer hat wann an wen)</h1>
+<p class="help">Dieses Protokoll enthält keine Inhalte (kein Text/kein Betreff wird ausgewertet), sondern nur Versanddaten.</p>
+
+<% if (!logs.length) { %>
+  <div class="notification is-light">Keine Einträge.</div>
+<% } else { %>
+  <table class="table is-fullwidth is-hoverable">
+    <thead>
+      <tr>
+        <th>Datum</th>
+        <th>Von</th>
+        <th>An (To)</th>
+        <th>CC</th>
+        <th>BCC</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% logs.forEach(l => { %>
+        <tr>
+          <td><%= l.created_at %></td>
+          <td><%= l.sender_name %> &lt;<%= l.sender_email %>&gt;</td>
+          <td><%= l.to || '—' %></td>
+          <td><%= l.cc || '—' %></td>
+          <td><%= l.bcc || '—' %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<% } %>
+
+<%- include('partials/layout_end', { showSidebar: false }) %>
+
+<%- include('partials/footer') %>

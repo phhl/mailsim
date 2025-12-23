@@ -1,0 +1,31 @@
+<%- include('partials/header', { title: 'Login', me: null, extraHead: '' }) %>
+
+<div class="columns is-centered">
+  <div class="column is-5">
+    <div class="box">
+      <h1 class="title is-4">Login</h1>
+      <% if (error) { %>
+        <div class="notification is-danger is-light"><%= error %></div>
+      <% } %>
+      <form method="post" action="/login">
+        <div class="field">
+          <label class="label">Benutzername</label>
+          <div class="control">
+            <input class="input" name="username" autocomplete="username" required />
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Passwort</label>
+          <div class="control">
+            <input class="input" type="password" name="password" autocomplete="current-password" required />
+          </div>
+        </div>
+        <div class="field">
+          <button class="button is-link is-fullwidth">Anmelden</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/footer') %>

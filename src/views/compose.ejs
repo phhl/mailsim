@@ -1,0 +1,232 @@
+<%
+const quillHead = `
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+<style>
+  .chip{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .5rem;border-radius:999px;background:#f5f5f5;margin:.15rem}
+  .chip button{border:0;background:transparent;cursor:pointer}
+  .suggest{border:1px solid #dbdbdb;border-top:0;max-height:180px;overflow:auto}
+  .suggest a{display:block;padding:.4rem .6rem}
+  .suggest a:hover{background:#f5f5f5}
+</style>
+`;
+%>
+<%- include('partials/header', { title: 'Verfassen', me, extraHead: quillHead }) %>
+<%- include('partials/layout_start', { showSidebar: true, activeFolder: 'INBOX' }) %>
+
+<h1 class="title is-4">E‑Mail verfassen</h1>
+
+<% if (error) { %>
+  <div class="notification is-danger is-light"><%= error %></div>
+<% } %>
+
+<% if (me.role === 'student' && !me.send_window_open) { %>
+  <div class="notification is-warning is-light">
+    Versand ist aktuell gesperrt. Entwürfe können gespeichert werden; zum Senden muss die Lehrkraft das Versandfenster öffnen.
+  </div>
+<% } %>
+
+<div class="box">
+  <form method="post" action="/compose" id="composeForm">
+    <div class="field">
+      <label class="label">An (To)</label>
+      <div class="control">
+        <input class="input" id="toInput" type="text" placeholder="Adresse eingeben und Enter drücken …">
+      </div>
+      <div id="toChips"></div>
+      <div id="toSuggest" class="suggest is-hidden"></div>
+    </div>
+
+    <div class="compose-grid"><div class="columns">
+      <div class="column">
+        <label class="label">CC</label>
+        <input class="input" id="ccInput" type="text" placeholder="Adresse eingeben und Enter drücken …">
+        <div id="ccChips"></div>
+        <div id="ccSuggest" class="suggest is-hidden"></div>
+      </div>
+      <div class="column">
+        <label class="label">BCC</label>
+        <input class="input" id="bccInput" type="text" placeholder="Adresse eingeben und Enter drücken …">
+        <div id="bccChips"></div>
+        <div id="bccSuggest" class="suggest is-hidden"></div>
+        <p class="help">BCC-Empfänger bleiben in der Schüleransicht verborgen; Lehrkraft und Admin sehen sie.</p>
+      </div>
+    </div></div>
+
+    <div class="field">
+      <label class="label">Betreff</label>
+      <div class="control">
+        <input class="input" name="subject" value="<%= preset.subject %>" required maxlength="200">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label">Nachricht</label>
+      <div id="editor" style="height: 220px;"></div>
+      <input type="hidden" name="body_html" id="body_html">
+      <!--
+        Server-side erwartet JSON-Arrays mit Nutzer-IDs in den Feldern
+        to_ids / cc_ids / bcc_ids.
+        (Vorher wurden hier to/cc/bcc verwendet – dadurch wurden Empfänger nicht gespeichert.)
+      -->
+      <!-- Hidden fields consumed by POST /compose. Keep ids as to/cc/bcc because JS writes to them. -->
+      <input type="hidden" name="to_ids" id="to" value="<%= (preset && preset.to ? preset.to : []).join(',') %>">
+      <input type="hidden" name="cc_ids" id="cc" value="<%= (preset && preset.cc ? preset.cc : []).join(',') %>">
+      <input type="hidden" name="bcc_ids" id="bcc" value="<%= (preset && preset.bcc ? preset.bcc : []).join(',') %>">
+    </div>
+
+    <div class="field is-grouped">
+      <div class="control">
+        <button class="button is-link" type="submit" name="action" value="send" <%= (me.role==='student' && !me.send_window_open) ? 'disabled' : '' %>>Senden</button>
+      </div>
+      <div class="control">
+        <button class="button is-light" type="submit" name="action" value="draft">Als Entwurf speichern</button>
+      </div>
+      <div class="control">
+        <a class="button is-text" href="/mailbox/INBOX">Abbrechen</a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script>
+  const quill = new Quill('#editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        ['bold','italic','underline'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['link'],
+        ['clean']
+      ]
+    }
+  });
+
+  const presetHtml = `<%- (preset.body_html || '').replaceAll('`', '\`') %>`;
+  if (presetHtml) quill.clipboard.dangerouslyPasteHTML(presetHtml);
+
+  const state = {
+    to: new Map(),
+    cc: new Map(),
+    bcc: new Map()
+  };
+
+  function renderChips(kind) {
+    const wrap = document.getElementById(kind + 'Chips');
+    wrap.innerHTML = '';
+    for (const [id, label] of state[kind].entries()) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML = `<span>${label}</span><button type="button" aria-label="remove">×</button>`;
+      chip.querySelector('button').addEventListener('click', () => {
+        state[kind].delete(id);
+        renderChips(kind);
+      });
+      wrap.appendChild(chip);
+    }
+  }
+
+  async function resolveAndAdd(kind, term) {
+    term = (term || '').trim();
+    if (!term) return;
+    const res = await fetch('/resolve?term=' + encodeURIComponent(term));
+    const data = await res.json();
+    if (!data.ok) {
+      alert('Adresse nicht gefunden: ' + term);
+      return;
+    }
+    state[kind].set(String(data.id), data.label);
+    renderChips(kind);
+  }
+
+  let activeFetch = 0;
+  async function showSuggestions(kind, q) {
+    const box = document.getElementById(kind + 'Suggest');
+    if (!q || q.trim().length < 2) {
+      box.classList.add('is-hidden');
+      box.innerHTML = '';
+      return;
+    }
+    const token = ++activeFetch;
+    const res = await fetch('/addressbook?q=' + encodeURIComponent(q));
+    const items = await res.json();
+    if (token !== activeFetch) return;
+
+    box.innerHTML = '';
+    if (!items.length) {
+      box.classList.add('is-hidden');
+      return;
+    }
+    for (const it of items) {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = it.label;
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        state[kind].set(String(it.id), it.label);
+        renderChips(kind);
+        document.getElementById(kind + 'Input').value = '';
+        box.classList.add('is-hidden');
+      });
+      box.appendChild(a);
+    }
+    box.classList.remove('is-hidden');
+  }
+
+  function wire(kind) {
+    const input = document.getElementById(kind + 'Input');
+    if (!input) return;
+
+    input.addEventListener('input', () => showSuggestions(kind, input.value));
+    input.addEventListener('keydown', async (ev) => {
+      if (ev.key === 'Enter' || ev.key === ',') {
+        ev.preventDefault();
+        const value = input.value.replace(/,$/, '');
+        await resolveAndAdd(kind, value);
+        input.value = '';
+        document.getElementById(kind + 'Suggest').classList.add('is-hidden');
+      }
+      if (ev.key === 'Escape') {
+        document.getElementById(kind + 'Suggest').classList.add('is-hidden');
+      }
+    });
+
+    document.addEventListener('click', (ev) => {
+      const box = document.getElementById(kind + 'Suggest');
+      if (!box.contains(ev.target) && ev.target !== input) box.classList.add('is-hidden');
+    });
+  }
+
+  wire('to'); wire('cc'); wire('bcc');
+
+  // presets (ids passed in query -> server filled preset arrays)
+  const presetTo = <%- JSON.stringify(preset.to || []) %>;
+  const presetCc = <%- JSON.stringify(preset.cc || []) %>;
+  const presetBcc = <%- JSON.stringify(preset.bcc || []) %>;
+
+  async function hydratePreset(kind, ids) {
+    for (const id of ids) {
+            try {
+        const r = await fetch('/userlabel?id=' + encodeURIComponent(id));
+        const d = await r.json();
+        if (d.ok) state[kind].set(String(d.id), d.label);
+        else state[kind].set(String(id), '#' + id);
+      } catch { state[kind].set(String(id), '#' + id); }
+    }
+    renderChips(kind);
+  }
+  hydratePreset('to', presetTo);
+  hydratePreset('cc', presetCc);
+  hydratePreset('bcc', presetBcc);
+
+  document.getElementById('composeForm').addEventListener('submit', (ev) => {
+    document.getElementById('body_html').value = quill.root.innerHTML;
+    document.getElementById('to').value = Array.from(state.to.keys()).join(',');
+    document.getElementById('cc').value = Array.from(state.cc.keys()).join(',');
+    document.getElementById('bcc').value = Array.from(state.bcc.keys()).join(',');
+  });
+</script>
+
+<%- include('partials/layout_end', { showSidebar: true }) %>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <% const _title = (typeof title !== 'undefined' && title) ? title : 'Mail‑Simulator'; %>
+  <% const _assetVersion = (typeof assetVersion !== 'undefined' && assetVersion) ? assetVersion : Date.now(); %>
+  <% const _extraHead = (typeof extraHead !== 'undefined' && extraHead) ? extraHead : ''; %>
+  <title><%= _title %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <link rel="stylesheet" href="/assets/app.css?v=<%= _assetVersion %>">
+  <%- _extraHead %>
+</head>
+<body>
+<nav class="navbar is-light" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a class="navbar-item" href="/mailbox/INBOX"><strong>Mail‑Simulator</strong></a>
+  </div>
+
+  <div class="navbar-menu">
+    <div class="navbar-start">
+      <a class="navbar-item" href="/compose">Neu</a>
+      <% if (me && (me.role === 'teacher' || me.role === 'admin')) { %>
+        <a class="navbar-item" href="/teacher">Lehrkraft</a>
+        <a class="navbar-item" href="/logs">Protokoll</a>
+      <% } %>
+      <% if (me && me.role === 'admin') { %>
+        <a class="navbar-item" href="/admin">Admin</a>
+      <% } %>
+    </div>
+
+    <div class="navbar-end">
+      <% if (me) { %>
+        <div class="navbar-item">
+          <span class="mr-3"><%= me.display_name %> (<%= me.role %>)</span>
+          <a class="button is-small is-light" href="/logout">Logout</a>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</nav>

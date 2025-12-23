@@ -1,0 +1,165 @@
+<%- include('partials/header', { title: 'Admin', me }) %>
+<%- include('partials/layout_start', { showSidebar: false }) %>
+
+<section class="section">
+  <div class="container is-widescreen">
+    <h1 class="title">Admin-Bereich</h1>
+
+    <details open class="box">
+      <summary class="is-clickable"><strong>Konten anlegen</strong></summary>
+      <div class="mt-4">
+        <form method="post" action="/admin/create-user" class="box">
+          <div class="columns is-multiline">
+            <div class="column is-4">
+              <label class="label">Username</label>
+              <input class="input" type="text" name="username" required>
+            </div>
+            <div class="column is-4">
+              <label class="label">Anzeigename</label>
+              <input class="input" type="text" name="display_name" required>
+            </div>
+            <div class="column is-4">
+              <label class="label">Rolle</label>
+              <div class="select is-fullwidth">
+                <select name="role" required>
+                  <option value="student">student</option>
+                  <option value="teacher">teacher</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+            </div>
+            <div class="column is-4">
+              <label class="label">Kurs</label>
+              <div class="select is-fullwidth">
+                <select name="course_id" required>
+                  <% (courses || []).forEach(c => { %>
+                    <option value="<%= c.id %>"><%= c.name %></option>
+                  <% }) %>
+                </select>
+              </div>
+            </div>
+            <div class="column is-4">
+              <label class="label">Ablauf</label>
+              <input class="input" type="date" name="expires_at" required>
+            </div>
+            <div class="column is-4">
+              <label class="label">Passwort (optional)</label>
+              <input class="input" type="text" name="password" placeholder="leer = zufällig">
+            </div>
+          </div>
+          <button class="button is-primary" type="submit">Anlegen</button>
+        </form>
+      </div>
+    </details>
+
+    <details class="box">
+      <summary class="is-clickable"><strong>CSV-Import / Export</strong></summary>
+      <div class="mt-4">
+        <div class="columns">
+          <div class="column">
+            <form method="post" action="/admin/import-csv" enctype="multipart/form-data" class="box">
+              <p class="mb-2"><strong>CSV importieren</strong></p>
+              <div class="field">
+                <div class="control">
+                  <input class="input" type="file" name="csv" accept=".csv" required>
+                </div>
+              </div>
+              <button class="button is-link" type="submit">Import starten</button>
+            </form>
+          </div>
+          <div class="column">
+            <div class="box">
+              <p class="mb-2"><strong>Zuletzt erzeugte CSV herunterladen</strong></p>
+              <a class="button is-light" href="/admin/download-created.csv">Download</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="box">
+      <summary class="is-clickable"><strong>Accounts löschen</strong></summary>
+      <div class="mt-4">
+        <form method="post" action="/admin/delete-users" class="box">
+          <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Rolle</th>
+                <th>Name</th>
+                <th>Username</th>
+                <th>Ablauf</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% (users || []).forEach(u => { %>
+                <tr>
+                  <td><input type="checkbox" name="user_ids" value="<%= u.id %>"></td>
+                  <td><%= u.role %></td>
+                  <td><%= u.display_name %></td>
+                  <td><span class="tag is-light"><%= u.username %></span></td>
+                  <td><%= u.expires_at %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+          <button class="button is-danger" type="submit">Ausgewählte löschen</button>
+        </form>
+      </div>
+    </details>
+
+    <details open class="box">
+      <summary class="is-clickable"><strong>Mails (alle Kurse)</strong></summary>
+      <div class="mt-4">
+        <form method="get" action="/admin" class="box">
+          <div class="field is-grouped is-align-items-end">
+            <div class="control">
+              <label class="label">Kursfilter</label>
+              <div class="select">
+                <select name="course_id">
+                  <option value="">Alle</option>
+                  <% (courses || []).forEach(c => { %>
+                    <option value="<%= c.id %>" <%= String(selectedCourseId||'')===String(c.id) ? 'selected' : '' %>><%= c.name %></option>
+                  <% }) %>
+                </select>
+              </div>
+            </div>
+            <div class="control">
+              <button class="button is-link" type="submit">Anwenden</button>
+            </div>
+          </div>
+        </form>
+
+        <table class="table is-fullwidth is-striped is-hoverable">
+          <thead>
+            <tr>
+              <th>Von</th>
+              <th>Betreff</th>
+              <th>Vorschau</th>
+              <th>Datum</th>
+              <th>Kurs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!messages || messages.length === 0) { %>
+              <tr><td colspan="5"><em>Keine Mails gefunden.</em></td></tr>
+            <% } else { %>
+              <% messages.forEach(m => { %>
+                <tr>
+                  <td><%= m.sender_name %> &lt;<%= m.sender_email %>&gt;</td>
+                  <td><a href="/mail/<%= m.id %>?context=admin"><%= m.subject || '(ohne Betreff)' %></a></td>
+                  <td class="has-text-grey"><%= m.preview || '' %></td>
+                  <td><%= m.created_at_local %></td>
+                  <td><%= m.course_name || '' %></td>
+                </tr>
+              <% }) %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+</section>
+
+<%- include('partials/layout_end', { showSidebar: false }) %>
+<%- include('partials/footer') %>
