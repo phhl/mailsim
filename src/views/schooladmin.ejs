@@ -1,0 +1,508 @@
+<%- include('partials/header', { title: t('schooladmin.title'), me }) %>
+<%- include('partials/layout_start', { showSidebar: false }) %>
+
+<section class="section admin-page">
+  <div class="container is-widescreen">
+    <div class="level admin-head">
+      <div class="level-left">
+        <div>
+          <h1 class="title">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-building-2-line" aria-hidden="true"></i></span>
+              <span><%= t('schooladmin.heading') %></span>
+            </span>
+          </h1>
+          <p class="subtitle"><%= t('schooladmin.subtitle') %></p>
+        </div>
+      </div>
+      <div class="level-right">
+        <% if (school) { %>
+          <div class="tags has-addons level-item">
+            <span class="tag is-light"><%= t('common.school') %></span>
+            <span class="tag is-info is-light"><%= school.name %></span>
+          </div>
+          <div class="tags has-addons level-item">
+            <span class="tag is-light"><%= t('common.domain') %></span>
+            <span class="tag is-info is-light"><%= school.domain %></span>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <% if (result) { %>
+      <div class="notification is-light <%= result.ok ? 'is-success' : 'is-danger' %>" data-toast>
+        <span><%= result.ok ? (result.message || t('common.action_success')) : (result.error || t('common.action_failed')) %></span>
+      </div>
+    <% } %>
+
+    <% if (role === 'admin') { %>
+      <form method="get" action="/schooladmin" class="admin-filter">
+        <div class="field is-grouped is-align-items-end">
+          <div class="control">
+            <label class="label"><%= t('schooladmin.filter_school_label') %></label>
+            <div class="select">
+              <select name="school_id">
+                <option value=""><%= t('common.choose') %></option>
+                <% (schools || []).forEach(s => { %>
+                  <option value="<%= s.id %>" <%= String(selectedSchoolId||'')===String(s.id) ? 'selected' : '' %>><%= s.name %> (<%= s.domain %>)</option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+          <div class="control">
+            <button class="button is-link" type="submit">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-filter-3-line" aria-hidden="true"></i></span>
+                <span><%= t('common.apply') %></span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </form>
+    <% } %>
+
+    <% if (!school) { %>
+      <div class="notification is-light"><%= t('schooladmin.select_school_first') %></div>
+    <% } %>
+
+    <div class="admin-panel">
+      <div class="admin-panel__head">
+        <h2 class="title is-5">
+          <span class="icon-text">
+            <span class="icon"><i class="ri-book-2-line" aria-hidden="true"></i></span>
+            <span><%= t('schooladmin.panel_courses_title') %></span>
+          </span>
+        </h2>
+        <span class="tag is-light"><%= t('common.management') %></span>
+      </div>
+      <div class="admin-panel__body">
+        <form method="post" action="/schooladmin/courses/create" class="admin-form">
+          <% if (role === 'admin') { %>
+            <input type="hidden" name="school_id" value="<%= selectedSchoolId || '' %>">
+          <% } %>
+          <div class="field">
+            <label class="label"><%= t('schooladmin.course_name_label') %></label>
+            <div class="field has-addons">
+              <div class="control is-expanded">
+                <input class="input" type="text" name="name" placeholder="<%= t('schooladmin.course_name_placeholder') %>" required <%= school ? '' : 'disabled' %>>
+              </div>
+              <div class="control">
+                <button class="button is-link" type="submit" <%= school ? '' : 'disabled' %>>
+                  <span class="icon-text">
+                    <span class="icon"><i class="ri-add-line" aria-hidden="true"></i></span>
+                    <span><%= t('schooladmin.create_course') %></span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        <div class="table-wrap">
+          <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+              <tr>
+                <th><%= t('common.course') %></th>
+                <th><%= t('common.students') %></th>
+                <th><%= t('common.teachers') %></th>
+                <th><%= t('common.mails') %></th>
+                <th class="actions-col"><%= t('common.actions') %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!courses || !courses.length) { %>
+                <tr><td colspan="5"><em><%= t('schooladmin.empty_courses') %></em></td></tr>
+              <% } else { %>
+                <% courses.forEach(c => { %>
+                  <tr>
+                    <td>
+                      <form method="post" action="/schooladmin/courses/update" class="inline-edit" data-inline-edit>
+                        <input type="hidden" name="course_id" value="<%= c.id %>">
+                        <% if (role === 'admin') { %>
+                          <input type="hidden" name="school_id" value="<%= selectedSchoolId || '' %>">
+                        <% } %>
+                        <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= c.name %></button>
+                        <div class="inline-edit__editor">
+                          <input class="input is-small inline-edit__input" type="text" name="name" value="<%= c.name %>" data-inline-edit-input data-original="<%= c.name %>" required>
+                          <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                          <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                        </div>
+                      </form>
+                    </td>
+                    <td><%= c.student_count %></td>
+                    <td><%= c.teacher_count %></td>
+                    <td><%= c.message_count %></td>
+                    <td class="admin-table-actions">
+                      <button
+                        class="button is-small is-danger is-light action-icon js-course-delete"
+                        type="button"
+                        title="<%= t('common.delete') %>"
+                        data-course-id="<%= c.id %>"
+                        data-course-name="<%= c.name %>"
+                        data-needs-confirm="<%= (c.student_count || c.teacher_count || c.message_count) ? '1' : '' %>"
+                        data-school-id="<%= selectedSchoolId || '' %>"
+                        aria-label="<%= t('common.delete') %>"
+                      ><span class="icon"><i class="ri-delete-bin-line" aria-hidden="true"></i></span></button>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-panel">
+      <div class="admin-panel__head">
+        <h2 class="title is-5">
+          <span class="icon-text">
+            <span class="icon"><i class="ri-team-line" aria-hidden="true"></i></span>
+            <span><%= t('schooladmin.panel_teachers_title') %></span>
+          </span>
+        </h2>
+        <span class="tag is-light"><%= t('schooladmin.teachers_tag') %></span>
+      </div>
+      <div class="admin-panel__body">
+        <form method="post" action="/schooladmin/teachers/create" class="admin-form">
+          <% if (role === 'admin') { %>
+            <input type="hidden" name="school_id" value="<%= selectedSchoolId || '' %>">
+          <% } %>
+          <div class="columns is-variable is-2">
+            <div class="column">
+              <div class="field">
+                <label class="label"><%= t('common.username') %></label>
+                <div class="control">
+                  <input class="input" type="text" name="username" required <%= school ? '' : 'disabled' %>>
+                </div>
+              </div>
+            </div>
+            <div class="column">
+              <div class="field">
+                <label class="label"><%= t('common.display_name') %></label>
+                <div class="control">
+                  <input class="input" type="text" name="display_name" required <%= school ? '' : 'disabled' %>>
+                </div>
+              </div>
+            </div>
+            <div class="column">
+              <div class="field">
+                <label class="label"><%= t('common.password') %></label>
+                <div class="control">
+                  <input class="input" type="text" name="password" required <%= school ? '' : 'disabled' %>>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label"><%= t('schooladmin.courses_label') %></label>
+            <div class="admin-checkbox-grid">
+              <% (courses || []).forEach(c => { %>
+                <label class="checkbox">
+                  <input type="checkbox" name="course_ids" value="<%= c.id %>" <%= school ? '' : 'disabled' %>>
+                  <%= c.name %>
+                </label>
+              <% }) %>
+            </div>
+          </div>
+          <div class="admin-form__actions">
+            <button class="button is-link" type="submit" <%= school ? '' : 'disabled' %>>
+              <span class="icon-text">
+                <span class="icon"><i class="ri-user-add-line" aria-hidden="true"></i></span>
+                <span><%= t('schooladmin.create_teacher') %></span>
+              </span>
+            </button>
+          </div>
+        </form>
+
+        <div class="table-wrap">
+          <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+              <tr>
+                <th><%= t('common.username') %></th>
+                <th><%= t('common.display_name') %></th>
+                <th><%= t('common.courses') %></th>
+                <th><%= t('common.password') %></th>
+                <th class="actions-col"><%= t('common.actions') %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!teachers || !teachers.length) { %>
+                <tr><td colspan="5"><em><%= t('schooladmin.empty_teachers') %></em></td></tr>
+              <% } else { %>
+                <% teachers.forEach(tchr => { %>
+                  <tr>
+                    <td><span class="tag is-light"><%= tchr.login || tchr.username %></span></td>
+                    <td>
+                      <form method="post" action="/schooladmin/teachers/update" class="teacher-edit">
+                        <input type="hidden" name="teacher_id" value="<%= tchr.id %>">
+                        <% if (role === 'admin') { %>
+                          <input type="hidden" name="school_id" value="<%= selectedSchoolId || '' %>">
+                        <% } %>
+                        <div class="inline-edit" data-inline-edit>
+                          <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= tchr.display_name %></button>
+                          <div class="inline-edit__editor">
+                            <input class="input is-small inline-edit__input" type="text" name="display_name" value="<%= tchr.display_name %>" data-inline-edit-input data-original="<%= tchr.display_name %>" required>
+                            <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                            <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                          </div>
+                        </div>
+                      </form>
+                    </td>
+                    <td>
+                      <form method="post" action="/schooladmin/teachers/update" class="teacher-edit">
+                        <input type="hidden" name="teacher_id" value="<%= tchr.id %>">
+                        <% if (role === 'admin') { %>
+                          <input type="hidden" name="school_id" value="<%= selectedSchoolId || '' %>">
+                        <% } %>
+                        <div class="admin-checkbox-grid">
+                          <% (courses || []).forEach(c => { %>
+                            <label class="checkbox">
+                              <input type="checkbox" name="course_ids" value="<%= c.id %>" <%= (teacherCourses.get(tchr.id) || []).includes(c.id) ? 'checked' : '' %>>
+                              <%= c.name %>
+                            </label>
+                          <% }) %>
+                        </div>
+                        <button class="button is-small is-light" type="submit"><%= t('schooladmin.save_courses') %></button>
+                      </form>
+                    </td>
+                    <td>
+                      <form method="post" action="/schooladmin/teachers/update" class="teacher-edit">
+                        <input type="hidden" name="teacher_id" value="<%= tchr.id %>">
+                        <% if (role === 'admin') { %>
+                          <input type="hidden" name="school_id" value="<%= selectedSchoolId || '' %>">
+                        <% } %>
+                        <div class="inline-edit" data-inline-edit>
+                          <button class="button is-small is-light inline-edit__trigger" type="button" data-inline-edit-trigger><%= t('schooladmin.set_password') %></button>
+                          <div class="inline-edit__editor">
+                            <input class="input is-small inline-edit__input" type="text" name="password" placeholder="<%= t('admin.new_password_placeholder') %>" data-inline-edit-input>
+                            <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                            <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                          </div>
+                        </div>
+                      </form>
+                    </td>
+                    <td class="admin-table-actions">
+                      <button
+                        class="button is-small is-danger is-light js-teacher-delete"
+                        type="button"
+                        data-teacher-id="<%= tchr.id %>"
+                        data-teacher-name="<%= tchr.display_name || tchr.username %>"
+                        data-school-id="<%= selectedSchoolId || '' %>"
+                      ><%= t('common.delete') %></button>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-panel admin-panel--wide">
+      <div class="admin-panel__head">
+        <h2 class="title is-5">
+          <span class="icon-text">
+            <span class="icon"><i class="ri-clipboard-line" aria-hidden="true"></i></span>
+            <span><%= t('admin.panel_logs_title') %></span>
+          </span>
+        </h2>
+        <span class="tag is-light"><%= t('common.logs') %></span>
+      </div>
+      <div class="admin-panel__body">
+      <% if (!school) { %>
+        <div class="notification is-light"><%= t('schooladmin.select_school_first') %></div>
+      <% } else { %>
+        <div data-logs-panel>
+          <%- include('partials/logs_table', {
+            logs,
+            logsPagination,
+            basePath: '/schooladmin',
+            logsQuery: (role === 'admin' && selectedSchoolId) ? { school_id: selectedSchoolId } : {},
+            emptyMessage: t('common.no_entries')
+          }) %>
+        </div>
+      <% } %>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="course-delete-modal">
+  <div class="modal-background" data-modal-close></div>
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title"><%= t('schooladmin.delete_course_title') %></p>
+      <button class="delete" aria-label="<%= t('common.close') %>" type="button" data-modal-close></button>
+    </header>
+    <section class="modal-card-body">
+      <p><%= t('schooladmin.delete_course_intro') %> <strong data-course-name></strong></p>
+      <p class="help" data-confirm-help><%= t('schooladmin.delete_course_help') %></p>
+      <div class="field mt-4" data-confirm-field>
+        <label class="label"><%= t('schooladmin.delete_course_confirm_label') %></label>
+        <div class="control">
+          <input class="input" type="text" name="confirm_name" form="course-delete-form">
+        </div>
+      </div>
+    </section>
+    <footer class="modal-card-foot">
+      <form method="post" action="/schooladmin/courses/delete" id="course-delete-form">
+        <input type="hidden" name="course_id">
+        <% if (role === 'admin') { %>
+          <input type="hidden" name="school_id">
+        <% } %>
+        <button class="button is-danger" type="submit"><%= t('common.delete') %></button>
+        <button class="button" type="button" data-modal-close><%= t('common.cancel') %></button>
+      </form>
+    </footer>
+  </div>
+</div>
+
+<div class="modal" id="teacher-delete-modal">
+  <div class="modal-background" data-modal-close></div>
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title"><%= t('schooladmin.delete_teacher_title') %></p>
+      <button class="delete" aria-label="<%= t('common.close') %>" type="button" data-modal-close></button>
+    </header>
+    <section class="modal-card-body">
+      <p><%= t('schooladmin.delete_teacher_intro') %> <strong data-teacher-name></strong></p>
+      <p class="help"><%= t('schooladmin.delete_teacher_help') %></p>
+    </section>
+    <footer class="modal-card-foot">
+      <form method="post" action="/schooladmin/teachers/delete" id="teacher-delete-form">
+        <input type="hidden" name="teacher_id">
+        <% if (role === 'admin') { %>
+          <input type="hidden" name="school_id">
+        <% } %>
+        <button class="button is-danger" type="submit"><%= t('common.delete') %></button>
+        <button class="button" type="button" data-modal-close><%= t('common.cancel') %></button>
+      </form>
+    </footer>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const panel = document.querySelector('[data-logs-panel]');
+    if (!panel) return;
+
+    const load = (url) => {
+      const u = new URL(url, window.location.origin);
+      u.searchParams.set('logs_only', '1');
+      return fetch(u.toString(), { headers: { 'X-Requested-With': 'fetch' } })
+        .then((res) => res.text())
+        .then((html) => { panel.innerHTML = html; });
+    };
+
+    panel.addEventListener('click', (e) => {
+      const link = e.target.closest('a[data-logs-link]');
+      if (!link || link.getAttribute('href') === '#') return;
+      e.preventDefault();
+      load(link.href);
+    });
+
+    panel.addEventListener('change', (e) => {
+      const select = e.target.closest('select[data-logs-page-size]');
+      if (!select) return;
+      const form = select.form;
+      if (!form) return;
+      e.preventDefault();
+      const params = new URLSearchParams(new FormData(form));
+      const url = form.action + '?' + params.toString();
+      load(url);
+    });
+  })();
+
+  (function () {
+    const editForms = document.querySelectorAll('[data-inline-edit]');
+    editForms.forEach((form) => {
+      const trigger = form.querySelector('[data-inline-edit-trigger]');
+      const cancel = form.querySelector('[data-inline-edit-cancel]');
+      const input = form.querySelector('[data-inline-edit-input]');
+
+      if (!trigger || !cancel || !input) return;
+
+      const original = input.dataset.original ?? '';
+
+      trigger.addEventListener('click', () => {
+        form.classList.add('is-editing');
+        input.focus();
+        input.select();
+      });
+
+      cancel.addEventListener('click', () => {
+        input.value = original;
+        form.classList.remove('is-editing');
+      });
+    });
+
+    const courseModal = document.getElementById('course-delete-modal');
+    if (courseModal) {
+      const nameEl = courseModal.querySelector('[data-course-name]');
+      const confirmField = courseModal.querySelector('[data-confirm-field]');
+      const confirmHelp = courseModal.querySelector('[data-confirm-help]');
+      const courseIdInput = courseModal.querySelector('input[name="course_id"]');
+      const schoolIdInput = courseModal.querySelector('input[name="school_id"]');
+      const confirmInput = courseModal.querySelector('input[name="confirm_name"]');
+
+      const closeCourseModal = () => {
+        courseModal.classList.remove('is-active');
+        if (confirmInput) confirmInput.value = '';
+      };
+
+      courseModal.querySelectorAll('[data-modal-close]').forEach((btn) => {
+        btn.addEventListener('click', closeCourseModal);
+      });
+
+      document.querySelectorAll('.js-course-delete').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const name = btn.dataset.courseName || '';
+          const needsConfirm = !!btn.dataset.needsConfirm;
+
+          if (nameEl) nameEl.textContent = name;
+          if (courseIdInput) courseIdInput.value = btn.dataset.courseId || '';
+          if (schoolIdInput) schoolIdInput.value = btn.dataset.schoolId || '';
+
+          if (confirmField) confirmField.style.display = needsConfirm ? '' : 'none';
+          if (confirmHelp) confirmHelp.style.display = needsConfirm ? '' : 'none';
+          if (confirmInput) {
+            confirmInput.required = needsConfirm;
+            confirmInput.value = '';
+          }
+
+          courseModal.classList.add('is-active');
+        });
+      });
+    }
+
+    const teacherModal = document.getElementById('teacher-delete-modal');
+    if (teacherModal) {
+      const teacherNameEl = teacherModal.querySelector('[data-teacher-name]');
+      const teacherIdInput = teacherModal.querySelector('input[name="teacher_id"]');
+      const teacherSchoolInput = teacherModal.querySelector('input[name="school_id"]');
+
+      const closeTeacherModal = () => {
+        teacherModal.classList.remove('is-active');
+      };
+
+      teacherModal.querySelectorAll('[data-modal-close]').forEach((btn) => {
+        btn.addEventListener('click', closeTeacherModal);
+      });
+
+      document.querySelectorAll('.js-teacher-delete').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (teacherNameEl) teacherNameEl.textContent = btn.dataset.teacherName || '';
+          if (teacherIdInput) teacherIdInput.value = btn.dataset.teacherId || '';
+          if (teacherSchoolInput) teacherSchoolInput.value = btn.dataset.schoolId || '';
+
+          teacherModal.classList.add('is-active');
+        });
+      });
+    }
+  })();
+</script>
+
+<%- include('partials/layout_end', { showSidebar: false }) %>
+<%- include('partials/footer') %>

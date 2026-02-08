@@ -7,6 +7,10 @@ function openDb(dbPath) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const db = new Database(dbPath);
   db.pragma('foreign_keys = ON');
+  // Improve concurrent read/write behavior and reduce SQLITE_BUSY errors.
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('busy_timeout = 5000');
   return db;
 }
 

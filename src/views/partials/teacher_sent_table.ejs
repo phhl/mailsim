@@ -1,0 +1,93 @@
+<% const base = basePath || '/teacher'; %>
+<% const paramsBase = Object.assign({}, sentQuery || {}); %>
+
+<% if (!sentOverview || !sentOverview.length) { %>
+  <article class="message is-light">
+    <div class="message-body"><%= t('teacher.sent_empty') %></div>
+  </article>
+<% } else { %>
+  <div class="table-wrap table-wrap--logs">
+    <table class="table is-fullwidth is-striped is-hoverable logs-table">
+      <thead>
+        <tr>
+          <th><%= t('common.from') %></th>
+          <th><%= t('common.subject') %></th>
+          <th><%= t('common.preview') %></th>
+          <th><%= t('common.date') %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% sentOverview.forEach(m => { %>
+          <tr>
+            <td>
+  <%= m.sender_name %> &lt;<%= m.sender_email %>&gt;
+  <% if (m.delivery_folder === 'TRASH') { %>
+    <br/><span class="tag is-warning is-light">Papierkorb</span>
+  <% } %>
+</td>
+
+            <td><a href="/mail/<%= m.message_id %>"><%= m.subject || t('message.no_subject') %></a></td>
+            <td><%= m.preview || '' %></td>
+            <td><%= m.created_at_local || m.created_at %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <% if (sentPagination) { %>
+    <form method="get" action="<%= base %>" class="admin-filter" data-sent-form>
+      <div class="field is-grouped is-align-items-end">
+        <div class="control">
+          <label class="label"><%= t('common.entries_per_page') %></label>
+          <div class="select">
+            <select name="sent_page_size" data-sent-page-size>
+              <% (sentPagination.pageSizes || []).forEach(size => { %>
+                <option value="<%= size %>" <%= size === sentPagination.pageSize ? 'selected' : '' %>><%= size %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+        <input type="hidden" name="sent_page" value="<%= sentPagination.page %>">
+        <% Object.keys(paramsBase).forEach((key) => { %>
+          <input type="hidden" name="<%= key %>" value="<%= paramsBase[key] %>">
+        <% }) %>
+      </div>
+    </form>
+    <% if (sentPagination.totalPages > 1) { %>
+      <% const currentPage = sentPagination.page; %>
+      <% const totalPages = sentPagination.totalPages; %>
+      <% const prevPage = currentPage - 1; %>
+      <% const nextPage = currentPage + 1; %>
+      <% const startPage = Math.max(1, currentPage - 2); %>
+      <% const endPage = Math.min(totalPages, currentPage + 2); %>
+      <nav class="pagination is-centered mt-3" role="navigation" aria-label="pagination">
+        <% const prevParams = new URLSearchParams(Object.assign({}, paramsBase, { sent_page: prevPage, sent_page_size: sentPagination.pageSize })); %>
+        <% const nextParams = new URLSearchParams(Object.assign({}, paramsBase, { sent_page: nextPage, sent_page_size: sentPagination.pageSize })); %>
+        <a class="pagination-previous <%= currentPage <= 1 ? 'is-disabled' : '' %>" data-sent-link href="<%= currentPage <= 1 ? '#' : `${base}?${prevParams.toString()}` %>" aria-disabled="<%= currentPage <= 1 ? 'true' : 'false' %>"><%= t('common.prev') %></a>
+        <a class="pagination-next <%= currentPage >= totalPages ? 'is-disabled' : '' %>" data-sent-link href="<%= currentPage >= totalPages ? '#' : `${base}?${nextParams.toString()}` %>" aria-disabled="<%= currentPage >= totalPages ? 'true' : 'false' %>"><%= t('common.next') %></a>
+        <ul class="pagination-list">
+          <% if (startPage > 1) { %>
+            <% const firstParams = new URLSearchParams(Object.assign({}, paramsBase, { sent_page: 1, sent_page_size: sentPagination.pageSize })); %>
+            <li><a class="pagination-link" data-sent-link href="<%= `${base}?${firstParams.toString()}` %>">1</a></li>
+            <% if (startPage > 2) { %>
+              <li><span class="pagination-ellipsis">&hellip;</span></li>
+            <% } %>
+          <% } %>
+          <% for (let p = startPage; p <= endPage; p++) { %>
+            <% const pageParams = new URLSearchParams(Object.assign({}, paramsBase, { sent_page: p, sent_page_size: sentPagination.pageSize })); %>
+            <li>
+              <a class="pagination-link <%= p === currentPage ? 'is-current' : '' %>" data-sent-link href="<%= `${base}?${pageParams.toString()}` %>" <%= p === currentPage ? 'aria-current=\"page\"' : '' %>><%= p %></a>
+            </li>
+          <% } %>
+          <% if (endPage < totalPages) { %>
+            <% if (endPage < totalPages - 1) { %>
+              <li><span class="pagination-ellipsis">&hellip;</span></li>
+            <% } %>
+            <% const lastParams = new URLSearchParams(Object.assign({}, paramsBase, { sent_page: totalPages, sent_page_size: sentPagination.pageSize })); %>
+            <li><a class="pagination-link" data-sent-link href="<%= `${base}?${lastParams.toString()}` %>"><%= totalPages %></a></li>
+          <% } %>
+        </ul>
+      </nav>
+    <% } %>
+  <% } %>
+<% } %>

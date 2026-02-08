@@ -1,165 +1,565 @@
-<%- include('partials/header', { title: 'Admin', me }) %>
+<%- include('partials/header', { title: t('admin.title'), me }) %>
 <%- include('partials/layout_start', { showSidebar: false }) %>
 
-<section class="section">
+<section class="section admin-page">
   <div class="container is-widescreen">
-    <h1 class="title">Admin-Bereich</h1>
-
-    <details open class="box">
-      <summary class="is-clickable"><strong>Konten anlegen</strong></summary>
-      <div class="mt-4">
-        <form method="post" action="/admin/create-user" class="box">
-          <div class="columns is-multiline">
-            <div class="column is-4">
-              <label class="label">Username</label>
-              <input class="input" type="text" name="username" required>
-            </div>
-            <div class="column is-4">
-              <label class="label">Anzeigename</label>
-              <input class="input" type="text" name="display_name" required>
-            </div>
-            <div class="column is-4">
-              <label class="label">Rolle</label>
-              <div class="select is-fullwidth">
-                <select name="role" required>
-                  <option value="student">student</option>
-                  <option value="teacher">teacher</option>
-                  <option value="admin">admin</option>
-                </select>
-              </div>
-            </div>
-            <div class="column is-4">
-              <label class="label">Kurs</label>
-              <div class="select is-fullwidth">
-                <select name="course_id" required>
-                  <% (courses || []).forEach(c => { %>
-                    <option value="<%= c.id %>"><%= c.name %></option>
-                  <% }) %>
-                </select>
-              </div>
-            </div>
-            <div class="column is-4">
-              <label class="label">Ablauf</label>
-              <input class="input" type="date" name="expires_at" required>
-            </div>
-            <div class="column is-4">
-              <label class="label">Passwort (optional)</label>
-              <input class="input" type="text" name="password" placeholder="leer = zufällig">
-            </div>
-          </div>
-          <button class="button is-primary" type="submit">Anlegen</button>
-        </form>
-      </div>
-    </details>
-
-    <details class="box">
-      <summary class="is-clickable"><strong>CSV-Import / Export</strong></summary>
-      <div class="mt-4">
-        <div class="columns">
-          <div class="column">
-            <form method="post" action="/admin/import-csv" enctype="multipart/form-data" class="box">
-              <p class="mb-2"><strong>CSV importieren</strong></p>
-              <div class="field">
-                <div class="control">
-                  <input class="input" type="file" name="csv" accept=".csv" required>
-                </div>
-              </div>
-              <button class="button is-link" type="submit">Import starten</button>
-            </form>
-          </div>
-          <div class="column">
-            <div class="box">
-              <p class="mb-2"><strong>Zuletzt erzeugte CSV herunterladen</strong></p>
-              <a class="button is-light" href="/admin/download-created.csv">Download</a>
-            </div>
-          </div>
+    <div class="level admin-head">
+      <div class="level-left">
+        <div>
+          <h1 class="title">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-settings-3-line" aria-hidden="true"></i></span>
+              <span><%= t('admin.heading') %></span>
+            </span>
+          </h1>
+          <p class="subtitle"><%= t('admin.subtitle') %></p>
         </div>
       </div>
-    </details>
+      <div class="level-right">
+        <div class="tags has-addons level-item">
+          <span class="tag is-light"><%= t('common.schools') %></span>
+          <span class="tag is-info is-light"><%= (schools || []).length %></span>
+        </div>
+        <div class="tags has-addons level-item">
+          <span class="tag is-light"><%= t('common.schooladmins') %></span>
+          <span class="tag is-info is-light"><%= (schooladmins || []).length %></span>
+        </div>
+      </div>
+    </div>
 
-    <details class="box">
-      <summary class="is-clickable"><strong>Accounts löschen</strong></summary>
-      <div class="mt-4">
-        <form method="post" action="/admin/delete-users" class="box">
+    <% if (schoolResult) { %>
+      <div class="notification is-light <%= schoolResult.ok ? 'is-success' : 'is-danger' %>" data-toast>
+        <strong><%= t('admin.schools_label') %></strong>
+        <span><%= schoolResult.ok ? t('common.action_success') : (schoolResult.error || t('common.action_failed')) %></span>
+      </div>
+    <% } %>
+
+    <% if (schoolAdminResult) { %>
+      <div class="notification is-light <%= schoolAdminResult.ok ? 'is-success' : 'is-danger' %>" data-toast>
+        <strong><%= t('admin.schooladmins_label') %></strong>
+        <span><%= schoolAdminResult.ok ? t('common.action_success') : (schoolAdminResult.error || t('common.action_failed')) %></span>
+      </div>
+    <% } %>
+
+    <% if (adminProfileResult) { %>
+      <div class="notification is-light <%= adminProfileResult.ok ? 'is-success' : 'is-danger' %>" data-toast>
+        <strong><%= t('admin.profile_label') %></strong>
+        <span><%= adminProfileResult.ok ? t('common.action_success') : (adminProfileResult.error || t('common.action_failed')) %></span>
+      </div>
+    <% } %>
+
+    <div class="admin-grid">
+      <div class="admin-panel">
+        <div class="admin-panel__head">
+          <h2 class="title is-5">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-user-settings-line" aria-hidden="true"></i></span>
+              <span><%= t('admin.panel_profile_title') %></span>
+            </span>
+          </h2>
+          <span class="tag is-light"><%= t('common.management') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <form method="post" action="/admin/profile" class="admin-form">
+            <div class="columns is-multiline is-variable is-2">
+              <div class="column is-8">
+                <div class="field">
+                  <label class="label"><%= t('common.display_name') %></label>
+                  <input class="input" type="text" name="display_name" value="<%= me?.display_name || '' %>" required>
+                </div>
+              </div>
+              <div class="column is-4">
+                <div class="field">
+                  <label class="label is-placeholder"><%= t('common.action') %></label>
+                  <div class="admin-form__actions">
+                    <button class="button is-link" type="submit">
+                      <span class="icon-text">
+                        <span class="icon"><i class="ri-save-line" aria-hidden="true"></i></span>
+                        <span><%= t('common.save') %></span>
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="admin-panel admin-panel--wide">
+        <div class="admin-panel__head">
+          <h2 class="title is-5">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-building-line" aria-hidden="true"></i></span>
+              <span><%= t('admin.panel_schools_title') %></span>
+            </span>
+          </h2>
+          <span class="tag is-light"><%= t('common.management') %></span>
+        </div>
+        <div class="admin-panel__body">
+        <form method="post" action="/admin/schools/create" class="admin-form">
+          <div class="columns is-multiline is-variable is-2">
+            <div class="column is-4">
+              <div class="field">
+                <label class="label"><%= t('admin.label_school_name') %></label>
+                <input class="input" type="text" name="name" placeholder="<%= t('admin.placeholder_school_name') %>" required>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label"><%= t('common.domain') %></label>
+                <input class="input" type="text" name="domain" placeholder="<%= t('admin.placeholder_domain') %>" required>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label is-placeholder"><%= t('common.action') %></label>
+                <div class="admin-form__actions">
+                  <button class="button is-link" type="submit">
+                    <span class="icon-text">
+                      <span class="icon"><i class="ri-add-line" aria-hidden="true"></i></span>
+                      <span><%= t('admin.create_school') %></span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        <div class="table-wrap mt-4">
           <table class="table is-fullwidth is-striped is-hoverable">
             <thead>
               <tr>
-                <th></th>
-                <th>Rolle</th>
-                <th>Name</th>
-                <th>Username</th>
-                <th>Ablauf</th>
+                <th><%= t('common.school') %></th>
+                <th><%= t('common.domain') %></th>
+                <th><%= t('common.courses') %></th>
+                <th><%= t('common.students') %></th>
+                <th><%= t('common.teachers') %></th>
+                <th><%= t('common.schooladmins') %></th>
+                <th><%= t('common.mails') %></th>
+                <th class="actions-col"><%= t('common.actions') %></th>
               </tr>
             </thead>
             <tbody>
-              <% (users || []).forEach(u => { %>
-                <tr>
-                  <td><input type="checkbox" name="user_ids" value="<%= u.id %>"></td>
-                  <td><%= u.role %></td>
-                  <td><%= u.display_name %></td>
-                  <td><span class="tag is-light"><%= u.username %></span></td>
-                  <td><%= u.expires_at %></td>
-                </tr>
-              <% }) %>
+              <% if (!schools || !schools.length) { %>
+                <tr><td colspan="8"><em><%= t('admin.empty_schools') %></em></td></tr>
+              <% } else { %>
+                <% schools.forEach(s => { %>
+                  <tr>
+                    <td>
+                      <form method="post" action="/admin/schools/update" class="inline-edit inline-edit--full" data-inline-edit>
+                        <input type="hidden" name="school_id" value="<%= s.id %>">
+                        <input type="hidden" name="domain" value="<%= s.domain %>">
+                        <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= s.name %></button>
+                        <div class="inline-edit__editor">
+                          <input class="input is-small inline-edit__input" type="text" name="name" value="<%= s.name %>" data-inline-edit-input data-original="<%= s.name %>" required>
+                          <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                          <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                        </div>
+                      </form>
+                    </td>
+                    <td>
+                      <form method="post" action="/admin/schools/update" class="inline-edit inline-edit--full" data-inline-edit>
+                        <input type="hidden" name="school_id" value="<%= s.id %>">
+                        <input type="hidden" name="name" value="<%= s.name %>">
+                        <button class="inline-edit__trigger" type="button" data-inline-edit-trigger>
+                          <span class="tag is-light"><%= s.domain %></span>
+                        </button>
+                        <div class="inline-edit__editor">
+                          <input class="input is-small inline-edit__input" type="text" name="domain" value="<%= s.domain %>" data-inline-edit-input data-original="<%= s.domain %>" required>
+                          <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                          <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                        </div>
+                      </form>
+                    </td>
+                    <td><%= s.course_count %></td>
+                    <td><%= s.student_count %></td>
+                    <td><%= s.teacher_count %></td>
+                    <td><%= s.schooladmin_count %></td>
+                    <td><%= s.message_count %></td>
+                    <td class="admin-table-actions">
+                      <button
+                        class="button is-small is-danger is-light action-icon js-school-delete"
+                        type="button"
+                        title="<%= t('common.delete') %>"
+                        data-school-id="<%= s.id %>"
+                        data-school-name="<%= s.name %>"
+                        data-needs-confirm="<%= (s.course_count || s.student_count || s.teacher_count || s.schooladmin_count || s.message_count) ? '1' : '' %>"
+                        aria-label="<%= t('common.delete') %>"
+                      ><span class="icon"><i class="ri-delete-bin-line" aria-hidden="true"></i></span></button>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } %>
             </tbody>
           </table>
-          <button class="button is-danger" type="submit">Ausgewählte löschen</button>
-        </form>
+        </div>
+        </div>
       </div>
-    </details>
 
-    <details open class="box">
-      <summary class="is-clickable"><strong>Mails (alle Kurse)</strong></summary>
-      <div class="mt-4">
-        <form method="get" action="/admin" class="box">
-          <div class="field is-grouped is-align-items-end">
-            <div class="control">
-              <label class="label">Kursfilter</label>
-              <div class="select">
-                <select name="course_id">
-                  <option value="">Alle</option>
-                  <% (courses || []).forEach(c => { %>
-                    <option value="<%= c.id %>" <%= String(selectedCourseId||'')===String(c.id) ? 'selected' : '' %>><%= c.name %></option>
-                  <% }) %>
-                </select>
+      <div class="admin-panel admin-panel--wide">
+        <div class="admin-panel__head">
+          <h2 class="title is-5">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-shield-user-line" aria-hidden="true"></i></span>
+              <span><%= t('admin.panel_schooladmins_title') %></span>
+            </span>
+          </h2>
+          <span class="tag is-light"><%= t('common.accounts') %></span>
+        </div>
+        <div class="admin-panel__body">
+        <form method="post" action="/admin/schooladmins/create" class="admin-form">
+          <div class="columns is-multiline is-variable is-2">
+            <div class="column is-4">
+              <div class="field">
+                <label class="label"><%= t('common.username') %></label>
+                <input class="input" type="text" name="username" required>
               </div>
             </div>
-            <div class="control">
-              <button class="button is-link" type="submit">Anwenden</button>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label"><%= t('common.display_name') %></label>
+                <input class="input" type="text" name="display_name" required>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label"><%= t('common.school') %></label>
+                <div class="select is-fullwidth">
+                  <select name="school_id" required>
+                    <option value=""><%= t('common.choose') %></option>
+                    <% (schools || []).forEach(s => { %>
+                      <option value="<%= s.id %>"><%= s.name %> (<%= s.domain %>)</option>
+                    <% }) %>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label"><%= t('common.password') %></label>
+                <input class="input" type="text" name="password" required>
+              </div>
+            </div>
+            <div class="column is-4 is-hidden-touch"></div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label is-placeholder"><%= t('common.action') %></label>
+                <div class="admin-form__actions">
+                  <button class="button is-link" type="submit">
+                    <span class="icon-text">
+                      <span class="icon"><i class="ri-user-add-line" aria-hidden="true"></i></span>
+                      <span><%= t('admin.create_schooladmin') %></span>
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </form>
 
-        <table class="table is-fullwidth is-striped is-hoverable">
-          <thead>
-            <tr>
-              <th>Von</th>
-              <th>Betreff</th>
-              <th>Vorschau</th>
-              <th>Datum</th>
-              <th>Kurs</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% if (!messages || messages.length === 0) { %>
-              <tr><td colspan="5"><em>Keine Mails gefunden.</em></td></tr>
-            <% } else { %>
-              <% messages.forEach(m => { %>
-                <tr>
-                  <td><%= m.sender_name %> &lt;<%= m.sender_email %>&gt;</td>
-                  <td><a href="/mail/<%= m.id %>?context=admin"><%= m.subject || '(ohne Betreff)' %></a></td>
-                  <td class="has-text-grey"><%= m.preview || '' %></td>
-                  <td><%= m.created_at_local %></td>
-                  <td><%= m.course_name || '' %></td>
-                </tr>
-              <% }) %>
-            <% } %>
-          </tbody>
-        </table>
+        <div class="table-wrap mt-4">
+          <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+              <tr>
+                <th><%= t('common.username') %></th>
+                <th><%= t('common.display_name') %></th>
+                <th><%= t('common.school') %></th>
+                <th><%= t('common.password') %></th>
+                <th class="actions-col"><%= t('common.actions') %></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (!schooladmins || !schooladmins.length) { %>
+                <tr><td colspan="5"><em><%= t('admin.empty_schooladmins') %></em></td></tr>
+              <% } else { %>
+                <% schooladmins.forEach(u => { %>
+                  <tr>
+                    <td><span class="tag is-light"><%= u.login || u.username %></span></td>
+                    <td>
+                      <form method="post" action="/admin/schooladmins/update" class="inline-edit inline-edit--full" data-inline-edit>
+                        <input type="hidden" name="user_id" value="<%= u.id %>">
+                        <input type="hidden" name="school_id" value="<%= u.school_id || '' %>">
+                        <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= u.display_name %></button>
+                        <div class="inline-edit__editor">
+                          <input class="input is-small inline-edit__input" type="text" name="display_name" value="<%= u.display_name %>" data-inline-edit-input data-original="<%= u.display_name %>" required>
+                          <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                          <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                        </div>
+                      </form>
+                    </td>
+                    <td>
+                      <form method="post" action="/admin/schooladmins/update" class="inline-edit inline-edit--full" data-inline-edit>
+                        <input type="hidden" name="user_id" value="<%= u.id %>">
+                        <input type="hidden" name="display_name" value="<%= u.display_name %>">
+                        <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= u.school_name || t('common.none') %></button>
+                        <div class="inline-edit__editor">
+                          <div class="select is-small">
+                            <select name="school_id" data-inline-edit-input data-original="<%= u.school_id || '' %>" required>
+                              <% (schools || []).forEach(s => { %>
+                                <option value="<%= s.id %>" <%= String(u.school_id||'')===String(s.id) ? 'selected' : '' %>><%= s.name %></option>
+                              <% }) %>
+                            </select>
+                          </div>
+                          <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                          <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                        </div>
+                      </form>
+                    </td>
+                    <td>
+                      <form method="post" action="/admin/schooladmins/password" class="admin-inline-form">
+                        <input type="hidden" name="user_id" value="<%= u.id %>">
+                        <div class="field is-grouped">
+                          <div class="control">
+                            <input class="input is-small" type="text" name="password" placeholder="<%= t('admin.new_password_placeholder') %>" required>
+                          </div>
+                          <div class="control">
+                            <button class="button is-small" type="submit"><%= t('common.set') %></button>
+                          </div>
+                        </div>
+                      </form>
+                    </td>
+                    <td>
+                      <button
+                        class="button is-small is-danger is-light js-schooladmin-delete"
+                        type="button"
+                        data-user-id="<%= u.id %>"
+                        data-user-name="<%= u.display_name %>"
+                      ><%= t('common.delete') %></button>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+        </div>
       </div>
-    </details>
+
+      <div class="admin-panel admin-panel--wide">
+        <div class="admin-panel__head">
+          <h2 class="title is-5">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-broom-line" aria-hidden="true"></i></span>
+              <span><%= t('admin.panel_expired_title') %></span>
+            </span>
+          </h2>
+          <span class="tag is-light"><%= t('common.cleanup') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <p class="mb-3"><%= t('admin.expired_label') %> <strong><%= expiredCount %></strong></p>
+          <form method="post" action="/admin/cleanup-expired">
+            <button class="button is-danger is-light" type="submit">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-delete-bin-6-line" aria-hidden="true"></i></span>
+                <span><%= t('admin.cleanup_button') %></span>
+              </span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="admin-panel admin-panel--wide">
+        <div class="admin-panel__head">
+          <h2 class="title is-5">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-clipboard-line" aria-hidden="true"></i></span>
+              <span><%= t('admin.panel_logs_title') %></span>
+            </span>
+          </h2>
+          <span class="tag is-light"><%= t('common.logs') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <div data-logs-panel>
+            <%- include('partials/logs_table', {
+              logs,
+              logsPagination,
+              basePath: '/admin',
+              logsQuery: {},
+              emptyMessage: t('common.no_entries')
+            }) %>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
+
+<div class="modal" id="school-delete-modal">
+  <div class="modal-background" data-modal-close></div>
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title"><%= t('admin.modal_delete_school_title') %></p>
+      <button class="delete" aria-label="<%= t('common.close') %>" type="button" data-modal-close></button>
+    </header>
+    <section class="modal-card-body">
+      <p><%= t('admin.modal_delete_school_intro') %> <strong data-school-name></strong></p>
+      <p class="help" data-confirm-help><%= t('admin.modal_delete_school_help') %></p>
+      <div class="field mt-4" data-confirm-field>
+        <label class="label"><%= t('admin.modal_delete_school_confirm_label') %></label>
+        <div class="control">
+          <input class="input" type="text" name="confirm_name" form="school-delete-form">
+        </div>
+      </div>
+    </section>
+    <footer class="modal-card-foot">
+      <form method="post" action="/admin/schools/delete" id="school-delete-form">
+        <input type="hidden" name="school_id">
+        <button class="button is-danger" type="submit"><%= t('common.delete') %></button>
+        <button class="button" type="button" data-modal-close><%= t('common.cancel') %></button>
+      </form>
+    </footer>
+  </div>
+</div>
+
+<div class="modal" id="schooladmin-delete-modal">
+  <div class="modal-background" data-modal-close></div>
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title"><%= t('admin.delete_schooladmin_title') %></p>
+      <button class="delete" aria-label="<%= t('common.close') %>" type="button" data-modal-close></button>
+    </header>
+    <section class="modal-card-body">
+      <p><%= t('admin.delete_schooladmin_intro') %> <strong data-schooladmin-name></strong></p>
+      <p class="help" data-confirm-help><%= t('admin.delete_schooladmin_help') %></p>
+      <div class="field mt-4" data-confirm-field>
+        <label class="label"><%= t('admin.delete_schooladmin_confirm_label') %></label>
+        <div class="control">
+          <input class="input" type="text" name="confirm_name" form="schooladmin-delete-form">
+        </div>
+      </div>
+    </section>
+    <footer class="modal-card-foot">
+      <form method="post" action="/admin/schooladmins/delete" id="schooladmin-delete-form">
+        <input type="hidden" name="user_id">
+        <button class="button is-danger" type="submit"><%= t('common.delete') %></button>
+        <button class="button" type="button" data-modal-close><%= t('common.cancel') %></button>
+      </form>
+    </footer>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const panel = document.querySelector('[data-logs-panel]');
+    if (!panel) return;
+
+    const load = (url) => {
+      const u = new URL(url, window.location.origin);
+      u.searchParams.set('logs_only', '1');
+      return fetch(u.toString(), { headers: { 'X-Requested-With': 'fetch' } })
+        .then((res) => res.text())
+        .then((html) => { panel.innerHTML = html; });
+    };
+
+    panel.addEventListener('click', (e) => {
+      const link = e.target.closest('a[data-logs-link]');
+      if (!link || link.getAttribute('href') === '#') return;
+      e.preventDefault();
+      load(link.href);
+    });
+
+    panel.addEventListener('change', (e) => {
+      const select = e.target.closest('select[data-logs-page-size]');
+      if (!select) return;
+      const form = select.form;
+      if (!form) return;
+      e.preventDefault();
+      const params = new URLSearchParams(new FormData(form));
+      const url = form.action + '?' + params.toString();
+      load(url);
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    const editForms = document.querySelectorAll('[data-inline-edit]');
+    editForms.forEach((form) => {
+      const trigger = form.querySelector('[data-inline-edit-trigger]');
+      const cancel = form.querySelector('[data-inline-edit-cancel]');
+      const inputs = Array.from(form.querySelectorAll('[data-inline-edit-input]'));
+      if (!trigger || !cancel || !inputs.length) return;
+
+      trigger.addEventListener('click', () => {
+        form.classList.add('is-editing');
+        inputs[0].focus();
+        inputs[0].select();
+      });
+
+      cancel.addEventListener('click', () => {
+        inputs.forEach((input) => {
+          const original = input.dataset.original ?? '';
+          input.value = original;
+        });
+        form.classList.remove('is-editing');
+      });
+    });
+
+    const modal = document.getElementById('school-delete-modal');
+    const adminModal = document.getElementById('schooladmin-delete-modal');
+
+    const nameEl = modal.querySelector('[data-school-name]');
+    const confirmField = modal.querySelector('[data-confirm-field]');
+    const confirmHelp = modal.querySelector('[data-confirm-help]');
+    const schoolIdInput = modal.querySelector('input[name="school_id"]');
+    const confirmInput = modal.querySelector('input[name="confirm_name"]');
+
+    const closeModal = () => {
+      modal.classList.remove('is-active');
+      if (confirmInput) confirmInput.value = '';
+    };
+
+    modal.querySelectorAll('[data-modal-close]').forEach((btn) => {
+      btn.addEventListener('click', closeModal);
+    });
+
+    document.querySelectorAll('.js-school-delete').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.schoolName || '';
+        const needsConfirm = !!btn.dataset.needsConfirm;
+
+        if (nameEl) nameEl.textContent = name;
+        if (schoolIdInput) schoolIdInput.value = btn.dataset.schoolId || '';
+
+        if (confirmField) confirmField.style.display = needsConfirm ? '' : 'none';
+        if (confirmHelp) confirmHelp.style.display = needsConfirm ? '' : 'none';
+        if (confirmInput) {
+          confirmInput.required = needsConfirm;
+          confirmInput.value = '';
+        }
+
+        modal.classList.add('is-active');
+      });
+    });
+
+    if (!adminModal) return;
+    const adminNameEl = adminModal.querySelector('[data-schooladmin-name]');
+    const adminIdInput = adminModal.querySelector('input[name="user_id"]');
+    const adminConfirmInput = adminModal.querySelector('input[name="confirm_name"]');
+
+    const closeAdminModal = () => {
+      adminModal.classList.remove('is-active');
+      if (adminConfirmInput) adminConfirmInput.value = '';
+    };
+
+    adminModal.querySelectorAll('[data-modal-close]').forEach((btn) => {
+      btn.addEventListener('click', closeAdminModal);
+    });
+
+    document.querySelectorAll('.js-schooladmin-delete').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (adminNameEl) adminNameEl.textContent = btn.dataset.userName || '';
+        if (adminIdInput) adminIdInput.value = btn.dataset.userId || '';
+        if (adminConfirmInput) {
+          adminConfirmInput.required = true;
+          adminConfirmInput.value = '';
+        }
+        adminModal.classList.add('is-active');
+      });
+    });
+  })();
+</script>
 
 <%- include('partials/layout_end', { showSidebar: false }) %>
 <%- include('partials/footer') %>

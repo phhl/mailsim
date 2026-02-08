@@ -1,122 +1,1380 @@
-<%- include('partials/header', { title: 'Lehrkraft', me }) %>
+<%- include('partials/header', { title: t('teacher.title'), me }) %>
 <%- include('partials/layout_start', { showSidebar: false }) %>
 
-<section class="section">
+<section class="section admin-page teacher-page">
   <div class="container is-widescreen">
-    <h1 class="title">Lehrkraft-Bereich</h1>
-
-    <!-- Versandfenster: immer ausgeklappt -->
-    <details open class="box">
-      <summary class="is-clickable">
-        <strong>Versandfenster (Kurs <%= (course && course.name) ? course.name : '—' %>)</strong>
-      </summary>
-      <div class="content mt-4">
-        <% if (sendWindow && sendWindow.is_open) { %>
-          <p><strong>Status:</strong> <span class="tag is-success">OFFEN</span></p>
-          <p>Offen bis: <%= sendWindow.open_until_local || sendWindow.open_until || '—' %></p>
-        <% } else { %>
-          <p><strong>Status:</strong> <span class="tag is-danger">GESCHLOSSEN</span></p>
-        <% } %>
-
-        <form action="/teacher/open-send" method="post" class="field has-addons" style="max-width: 420px;">
-          <div class="control" style="flex: 1;">
-            <input class="input" type="number" min="1" max="240" name="minutes" value="45" required>
-          </div>
-          <div class="control">
-            <button class="button is-link" type="submit">Öffnen (Min.)</button>
-          </div>
-          <div class="control">
-            <a class="button is-warning" href="/teacher/close-send">Schließen</a>
-          </div>
-        </form>
+    <div class="level admin-head">
+      <div class="level-left">
+        <div>
+          <h1 class="title">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-graduation-cap-line" aria-hidden="true"></i></span>
+              <span><%= t('teacher.heading') %></span>
+            </span>
+          </h1>
+          <p class="subtitle is-6"><%= t('teacher.subtitle') %></p>
+        </div>
       </div>
-    </details>
+      <div class="level-right">
+        <div class="tags has-addons level-item">
+          <span class="tag is-light"><%= t('common.course') %></span>
+          <span class="tag is-info is-light"><%= (course && course.name) ? course.name : t('common.none') %></span>
+        </div>
+        <div class="tags has-addons level-item">
+          <span class="tag is-light"><%= t('teacher.tag_send_window') %></span>
+          <% if (windowOpen) { %>
+            <span class="tag is-success is-light"><%= t('teacher.send_window_open') %></span>
+          <% } else { %>
+            <span class="tag is-danger is-light"><%= t('teacher.send_window_closed') %></span>
+          <% } %>
+        </div>
+        <div class="tags has-addons level-item">
+          <span class="tag is-light"><%= t('teacher.tag_attachments') %></span>
+          <% if (attachmentsEnabled) { %>
+            <span class="tag is-success is-light"><%= t('teacher.attachments_enabled') %></span>
+          <% } else { %>
+            <span class="tag is-danger is-light"><%= t('teacher.attachments_disabled') %></span>
+          <% } %>
+        </div>
+      </div>
+    </div>
 
-    <!-- CSV Import -->
-    <details class="box">
-      <summary class="is-clickable"><strong>Schülerkonten per CSV importieren</strong></summary>
-      <div class="content mt-4">
-        <form action="/teacher/import-csv" method="post" enctype="multipart/form-data">
-          <div class="field">
-            <label class="label">CSV-Datei</label>
-            <div class="control">
-              <input class="input" type="file" name="csv" accept=".csv" required>
+    <% if (userResult) { %>
+      <div class="notification is-light <%= userResult.ok ? 'is-success' : 'is-danger' %>" data-toast>
+        <span><%= userResult.ok ? t('teacher.user_updated') : (userResult.error || t('common.action_failed')) %></span>
+      </div>
+    <% } %>
+
+    <% const filterSchoolId = (me.role === 'admin') ? selectedSchoolId : null; %>
+    <% const filterTeacherId = (me.role === 'schooladmin') ? selectedTeacherId : null; %>
+
+    <form method="get" action="/teacher" class="admin-filter" data-teacher-filter>
+      <div class="field is-grouped is-align-items-end">
+        <% if (me.role === 'admin') { %>
+          <div class="control">
+            <label class="label"><%= t('teacher.filter_school_label') %></label>
+            <div class="select">
+              <select name="school_id" data-school-select>
+                <option value=""><%= t('teacher.filter_all') %></option>
+                <% (schools || []).forEach(s => { %>
+                  <option value="<%= s.id %>" <%= String(selectedSchoolId||'')===String(s.id) ? 'selected' : '' %>><%= s.name %> (<%= s.domain %>)</option>
+                <% }) %>
+              </select>
             </div>
-            <p class="help">Spalten: <code>username,display_name,expires_at</code> (optional: <code>course</code>). Lehrkräfte importieren standardmäßig in ihren Kurs.</p>
           </div>
-          <button class="button is-primary" type="submit">Importieren</button>
+        <% } %>
+
+        <% if (me.role === 'schooladmin') { %>
+          <div class="control">
+            <label class="label"><%= t('teacher.filter_teacher_label') %></label>
+            <div class="select">
+              <select name="teacher_id">
+                <% (teachers || []).forEach(tchr => { %>
+                  <option value="<%= tchr.id %>" <%= String(selectedTeacherId||'')===String(tchr.id) ? 'selected' : '' %>><%= tchr.display_name %></option>
+                <% }) %>
+              </select>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (me.role !== 'student') { %>
+          <div class="control">
+            <label class="label"><%= t('teacher.filter_course_label') %></label>
+            <div class="select">
+              <select name="course_id" <%= (me.role === 'admin' && !selectedSchoolId) ? 'disabled' : '' %>>
+                <% if (me.role === 'admin' && !selectedSchoolId) { %>
+                  <option value=""><%= t('teacher.select_school_first') %></option>
+                <% } else { %>
+                  <% (courses || []).forEach(c => { %>
+                    <option value="<%= c.id %>" <%= String(selectedCourseId||'')===String(c.id) ? 'selected' : '' %>><%= c.name %></option>
+                  <% }) %>
+                <% } %>
+              </select>
+            </div>
+          </div>
+        <% } %>
+
+        <div class="control">
+          <button class="button is-link" type="submit">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-filter-3-line" aria-hidden="true"></i></span>
+              <span><%= t('common.apply') %></span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <div class="admin-panel">
+      <div class="admin-panel__head">
+        <h2 class="title is-5"><%= t('teacher.send_window_panel_title') %></h2>
+        <span class="tag is-light"><%= t('teacher.send_window_tag') %></span>
+      </div>
+      <div class="admin-panel__body">
+        <p class="help"><%= t('teacher.send_window_description') %></p>
+        <% if (!selectedCourseId) { %>
+          <div class="notification is-light"><%= t('teacher.select_course_first') %></div>
+        <% } else { %>
+          <div class="columns is-variable is-2 send-window-grid">
+            <div class="column">
+              <form action="/teacher/send-window/open" method="post" class="send-window-card">
+                <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                <div class="field">
+                  <label class="label" for="send-window-minutes"><%= t('teacher.duration_minutes_label') %></label>
+                  <div class="control">
+                    <input id="send-window-minutes" class="input" type="number" min="1" max="240" name="minutes" value="<%= sendWindowDefault %>" required>
+                  </div>
+                  <p class="help"><%= t('teacher.duration_help') %></p>
+                </div>
+                <div class="field">
+                  <label class="checkbox">
+                    <input type="checkbox" name="attachments_enabled" value="1">
+                    <span><%= t('teacher.attachments_toggle_label') %></span>
+                  </label>
+                  <p class="help"><%= t('teacher.attachments_toggle_help') %></p>
+                </div>
+                <button class="button is-link is-fullwidth send-window-action" type="submit">
+                  <span class="icon-text">
+                    <span class="icon"><i class="ri-door-open-line" aria-hidden="true"></i></span>
+                    <span><%= t('teacher.open_send_window') %></span>
+                  </span>
+                </button>
+              </form>
+            </div>
+            <div class="column">
+              <form action="/teacher/send-window/close" method="post" class="send-window-card mt-4">
+                <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                <% if (sendWindow && sendWindow.is_open && sendWindow.open_until_local) { %>
+                  <div class="send-window-time">
+                    <div class="send-window-time__label"><%= t('teacher.send_window_until') %></div>
+                    <div class="send-window-time__value">
+                      <span data-open-until="<%= sendWindow.open_until %>"><%= sendWindow.open_until_local %></span>
+                      <span class="ml-2" data-open-countdown></span>
+                    </div>
+                  </div>
+                <% } else { %>
+                  <div class="send-window-time send-window-time--closed">
+                    <div class="send-window-time__label"><%= t('teacher.send_window_until') %></div>
+                    <div class="send-window-time__value"><%= t('teacher.send_window_ended') %></div>
+                  </div>
+                <% } %>
+                <div class="field mt-5">
+                  <label class="label"><%= t('teacher.close_now_label') %></label>
+                  <p class="help mb-5"><%= t('teacher.close_help') %></p>
+                  <div class="control">
+                    <button class="button is-warning is-light is-fullwidth send-window-action" type="submit" <%= windowOpen ? '' : 'disabled' %>>
+                      <span class="icon-text">
+                        <span class="icon"><i class="ri-door-closed-line" aria-hidden="true"></i></span>
+                        <span><%= t('teacher.close_send_window') %></span>
+                      </span>
+                    </button>
+                  </div>
+                  
+                </div>
+              </form>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+    <div class="admin-panel">
+      <div class="admin-panel__head">
+        <h2 class="title is-5"><%= t('teacher.csv_panel_title') %></h2>
+        <span class="tag is-light"><%= t('teacher.csv_tag') %></span>
+      </div>
+      <div class="admin-panel__body">
+        <form action="/teacher/import-csv" method="post" enctype="multipart/form-data">
+          <input type="hidden" name="course_id" value="<%= selectedCourseId || '' %>">
+          <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+          <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+          <div class="field">
+            <label class="label" for="csv-import"><%= t('teacher.csv_file_label') %></label>
+            <div class="control">
+              <input id="csv-import" class="input" type="file" name="csv" accept=".csv" required>
+            </div>
+            <p class="help"><%- t('teacher.csv_help') %></p>
+          </div>
+          <button class="button is-primary" type="submit" <%= selectedCourseId ? '' : 'disabled' %>>
+            <span class="icon-text">
+              <span class="icon"><i class="ri-upload-2-line" aria-hidden="true"></i></span>
+              <span><%= t('teacher.csv_import_button') %></span>
+            </span>
+          </button>
         </form>
 
-        <% if (createdAccounts && createdAccounts.length) { %>
+        <% if (importResult && importResult.created && importResult.created.length) { %>
           <hr>
-          <h3 class="title is-5">Angelegte Accounts</h3>
-          <p class="help">Die Passwörter werden nur einmalig angezeigt. Exportiere sie jetzt als CSV.</p>
-          <div class="table-container">
-            <table class="table is-striped is-fullwidth">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Anzeigename</th>
-                  <th>Passwort</th>
-                  <th>Ablauf</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% createdAccounts.forEach(a => { %>
-                  <tr>
-                    <td><code><%= a.username %></code></td>
-                    <td><%= a.display_name %></td>
-                    <td><code><%= a.password %></code></td>
-                    <td><%= a.expires_at %></td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
+          <div class="notification is-success is-light">
+            <p><strong><%= importResult.created.length %></strong> <%= t('teacher.csv_created_notice') %></p>
+            <div class="buttons mt-3">
+              <a class="button is-link is-light" href="/teacher/download-created.csv">
+                <span class="icon-text">
+                  <span class="icon"><i class="ri-download-2-line" aria-hidden="true"></i></span>
+                  <span><%= t('teacher.csv_download_button') %></span>
+                </span>
+              </a>
+              <a class="button is-link is-light" href="/teacher/download-created.xlsx">
+                <span class="icon-text">
+                  <span class="icon"><i class="ri-file-excel-2-line" aria-hidden="true"></i></span>
+                  <span><%= t('teacher.excel_download_button') %></span>
+                </span>
+              </a>
+            </div>
+            <% if (createdAccounts && createdAccounts.length) { %>
+              <div class="table-wrap mt-4">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                  <thead>
+                    <tr>
+                      <th><%= t('teacher.table_name') %></th>
+                      <th><%= t('teacher.table_username') %></th>
+                      <th><%= t('teacher.table_login') %></th>
+                      <th><%= t('teacher.table_expires') %></th>
+                      <th><%= t('common.password') %></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% createdAccounts.forEach(row => { %>
+                      <tr>
+                        <td><%= row.display_name %></td>
+                        <td><span class="tag is-light"><%= row.username %></span></td>
+                        <td><span class="tag is-light"><%= row.login || row.username %></span></td>
+                        <td><%= row.expires_at || t('common.none') %></td>
+                        <td><span class="tag is-warning is-light"><%= row.password %></span></td>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              </div>
+            <% } %>
           </div>
-          <a class="button is-link is-light" href="/teacher/download-created.csv">CSV herunterladen</a>
+        <% } %>
+        <% if (importResult && importResult.errors && importResult.errors.length) { %>
+          <hr>
+          <div class="notification is-warning is-light">
+            <p><strong><%= importResult.errors.length %></strong> <%= t('teacher.csv_errors_notice') %></p>
+            <p class="help"><%= t('teacher.csv_error_example') %> <%= importResult.errors[0].error %></p>
+          </div>
         <% } %>
       </div>
-    </details>
-
-    <!-- Gesendet-Übersicht (kursbezogen, nur SuS, nur SENT) -->
-    <details class="box">
-      <summary class="is-clickable"><strong>Gesendet (nur Schüler:innen, nur SENT)</strong></summary>
-      <div class="content mt-4">
-        <p class="help">Hier siehst du alle von Schüler:innen deines Kurses gesendeten E-Mails. BCC-Empfänger werden angezeigt; in der Schüleransicht bleiben sie verborgen.</p>
-
-        <% if (!sentOverview || !sentOverview.length) { %>
-          <article class="message is-light">
-            <div class="message-body">Noch keine gesendeten E-Mails in diesem Kurs.</div>
+    </div>
+    <% if (!canCreate) { %>
+      <div class="admin-panel">
+        <div class="admin-panel__head">
+          <h2 class="title is-5"><%= t('teacher.generator_title') %></h2>
+          <span class="tag is-light"><%= t('teacher.generator_tag') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <article class="message is-warning">
+            <div class="message-body"><%= t('teacher.auto_disabled') %></div>
           </article>
-        <% } else { %>
-          <div class="table-container">
-            <table class="table is-fullwidth is-striped">
+        </div>
+      </div>
+    <% } else { %>
+      <div class="admin-panel generator-wrapper" data-generator-wrap>
+      <div class="generator-wrap" id="generator-class-profile">
+        <div class="admin-panel__head">
+          <h2 class="title is-5"><%= t('teacher.generator_class_profile_title') %></h2>
+          <span class="tag is-light"><%= t('teacher.generator_tag') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <input type="hidden" id="gen-course-id" value="<%= selectedCourseId || '' %>">
+          <div class="admin-form__grid admin-form__grid--three">
+            <div class="field">
+              <label class="label" for="gen-count"><%= t('teacher.generator_count_label') %></label>
+              <input id="gen-count" class="input is-static" type="text" value="0" readonly tabindex="-1" inputmode="none">
+              <p class="help"><%= t('teacher.generator_count_help') %></p>
+            </div>
+            <div class="field">
+              <label class="label"><%= t('teacher.generator_mode_label') %></label>
+              <div class="buttons has-addons">
+                <button class="button is-small is-link is-light is-selected" type="button" data-mode-btn data-mode="simple"><%= t('teacher.generator_mode_simple') %></button>
+                <button class="button is-small is-light" type="button" data-mode-btn data-mode="advanced"><%= t('teacher.generator_mode_advanced') %></button>
+              </div>
+              <input type="hidden" id="gen-mode" value="simple">
+            </div>
+          </div>
+
+            <div class="admin-form__section" data-simple>
+              <div class="admin-form__section-head">
+                <h3 class="title is-6"><%= t('teacher.generator_gender_title') %></h3>
+                <span class="tag is-light"><%= t('teacher.generator_simple_tag') %></span>
+              </div>
+            <div class="admin-form__grid admin-form__grid--three">
+              <div class="field">
+                <label class="label is-size-7"><%= t('teacher.gender_female') %></label>
+                <input class="input" type="number" min="0" max="<%= maxAutoCreate %>" value="0" data-simple-count="female">
+              </div>
+              <div class="field">
+                <label class="label is-size-7"><%= t('teacher.gender_male') %></label>
+                <input class="input" type="number" min="0" max="<%= maxAutoCreate %>" value="0" data-simple-count="male">
+              </div>
+              <div class="field">
+                <label class="label is-size-7"><%= t('teacher.gender_neutral') %></label>
+                <input class="input" type="number" min="0" max="<%= maxAutoCreate %>" value="0" data-simple-count="neutral">
+              </div>
+            </div>
+            <p class="help is-danger is-hidden" data-gender-warning><%= t('teacher.generator_count_warning') %></p>
+          </div>
+
+          <div class="admin-form__section" data-advanced>
+            <div class="admin-form__section-head">
+              <h3 class="title is-6"><%= t('teacher.generator_region_title') %></h3>
+              <span class="tag is-light"><%= t('teacher.generator_advanced_tag') %></span>
+            </div>
+            <div class="region-counts">
+              <div class="region-counts__head">
+                <div class="region-counts__label"><%= t('teacher.generator_region_label') %></div>
+                <div class="region-counts__col"><%= t('teacher.gender_female') %></div>
+                <div class="region-counts__col"><%= t('teacher.gender_male') %></div>
+                <div class="region-counts__col"><%= t('teacher.gender_neutral') %></div>
+              </div>
+              <% (regionOptions || []).forEach(opt => { %>
+                <div class="region-counts__row" data-region-count-row data-region-key="<%= opt.key %>">
+                  <div class="region-counts__label"><%= opt.label %></div>
+                  <input class="input" type="number" min="0" max="<%= maxAutoCreate %>" value="0" data-region-count data-gender="female">
+                  <input class="input" type="number" min="0" max="<%= maxAutoCreate %>" value="0" data-region-count data-gender="male">
+                  <input class="input" type="number" min="0" max="<%= maxAutoCreate %>" value="0" data-region-count data-gender="neutral">
+                </div>
+              <% }) %>
+            </div>
+            <p class="help is-danger is-hidden" data-region-warning><%= t('teacher.generator_region_required') %></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-form__section" id="generator-preview">
+        <div class="admin-form__section-headd">
+          <h2 class="title is-5"><%= t('teacher.generator_preview_title') %></h2>
+          <span class="tag is-light"><%= t('teacher.generator_preview_tag') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <div class="generator-rules-preview">
+            <div class="field" data-advanced id="generator-rules">
+              <label class="label"><%= t('teacher.generator_rules_title') %></label>
+              <div class="control">
+                <label class="radio">
+                  <input type="radio" name="combo_mode" value="typical" checked>
+                  <%= t('teacher.generator_combo_typical') %>
+                </label>
+                <label class="radio">
+                  <input type="radio" name="combo_mode" value="mixed">
+                  <%= t('teacher.generator_combo_mixed') %>
+                </label>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label"><%= t('teacher.generator_summary_title') %></label>
+              <div class="content">
+                <p><strong><%= t('teacher.generator_summary_total') %>:</strong> <span data-summary-total>0</span></p>
+                <p><strong><%= t('teacher.generator_summary_gender') %>:</strong> <span data-summary-gender>-</span></p>
+                <p><strong><%= t('teacher.generator_summary_regions') %>:</strong> <span data-summary-regions>-</span></p>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label"><%= t('teacher.generator_sample_title') %></label>
+              <div class="content">
+                <ul data-preview-list></ul>
+                <button class="button is-warning is-small mt-2" type="button" data-preview-refresh><%= t('teacher.generator_preview_refresh') %></button>
+                <p class="help is-size-7"><%= t('teacher.generator_preview_help') %></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-form__section" id="generator-accounts">
+        <div class="admin-form__section-head">
+          <h2 class="title is-5"><%= t('teacher.generator_accounts_title') %></h2>
+          <span class="tag is-light"><%= t('teacher.generator_accounts_tag') %></span>
+        </div>
+        <div class="admin-panel__body">
+          <div class="admin-form__grid admin-form__grid--two generator-compact">
+            <div class="field">
+              <label class="label"><%= t('teacher.generator_expires_label') %></label>
+              <input class="input is-small" type="date" data-expires-at>
+              <p class="help"><%= t('teacher.generator_expires_help') %></p>
+            </div>
+            <div class="field">
+              <label class="label"><%= t('teacher.generator_password_label') %></label>
+              <input class="input is-small" type="text" data-password-global>
+              <p class="help"><%= t('teacher.generator_password_help') %></p>
+            </div>
+          </div>
+          <div class="buttons generator-toolbar">
+            <button class="button is-link" type="button" data-generate><%= t('teacher.generator_build_button') %></button>
+          </div>
+          <div class="content is-size-7 generator-help">
+            <ul>
+              <li><%= t('teacher.generator_help_build') %></li>
+              <li>
+                <span class="icon is-small"><i class="ri-check-line" aria-hidden="true"></i></span>
+                <%= t('teacher.generator_help_check') %>
+              </li>
+              <li>
+                <span class="icon is-small"><i class="ri-refresh-line" aria-hidden="true"></i></span>
+                <%= t('teacher.generator_help_refresh') %>
+              </li>
+              <li>
+                <span class="icon is-small"><i class="ri-edit-2-line" aria-hidden="true"></i></span>
+                <%= t('teacher.generator_help_edit') %>
+              </li>
+              <li><%= t('teacher.generator_help_confirm') %></li>
+            </ul>
+          </div>
+          <div class="field">
+            <label class="label"><%= t('teacher.generator_columns_label') %></label>
+            <div class="control">
+              <label class="checkbox">
+                <input type="checkbox" data-col-toggle="region" checked> <%= t('teacher.generator_col_region') %>
+              </label>
+              <label class="checkbox ml-4">
+                <input type="checkbox" data-col-toggle="gender" checked> <%= t('teacher.generator_col_gender') %>
+              </label>
+              <label class="checkbox ml-4">
+                <input type="checkbox" data-col-toggle="username" checked> <%= t('teacher.generator_col_username') %>
+              </label>
+              <label class="checkbox ml-4">
+                <input type="checkbox" data-col-toggle="password" checked> <%= t('teacher.generator_col_password') %>
+              </label>
+            </div>
+          </div>
+          <div class="notification is-light is-hidden" data-generator-status></div>
+          <div class="table-wrap">
+            <table class="table is-fullwidth is-striped is-hoverable">
               <thead>
                 <tr>
-                  <th>Von</th>
-                  <th>Betreff</th>
-                  <th>Vorschau</th>
-                  <th>Datum</th>
+                  <th>#</th>
+                  <th><%= t('teacher.generator_col_first_name') %></th>
+                  <th><%= t('teacher.generator_col_last_name') %></th>
+                  <th data-col-header="gender"><%= t('teacher.generator_col_gender') %></th>
+                  <th data-col-header="region"><%= t('teacher.generator_col_region') %></th>
+                  <th data-col-header="username"><%= t('teacher.generator_col_username') %></th>
+                  <th data-col-header="password"><%= t('teacher.generator_col_password') %></th>
+                  <th><%= t('common.actions') %></th>
                 </tr>
               </thead>
-              <tbody>
-                <% sentOverview.forEach(m => { %>
-                  <tr>
-                    <td><%= m.sender_name %> &lt;<%= m.sender_username %>@<%= (course && course.name) ? course.name : 'kurs' %>.bbs-oa.de&gt;</td>
-                    <td><a href="/mail/<%= m.message_id %>?context=teacher"><%= m.subject || '(ohne Betreff)' %></a></td>
-                    <td><%= m.preview || '' %></td>
-                    <td><%= m.created_at_local || m.created_at %></td>
-                  </tr>
-                <% }) %>
+              <tbody data-generated-body>
+                <tr><td colspan="8"><em><%= t('teacher.generator_empty') %></em></td></tr>
               </tbody>
             </table>
           </div>
+          <div class="buttons generator-confirm-actions">
+            <button class="button is-primary" type="button" data-confirm disabled><%= t('teacher.generator_confirm_button') %></button>
+            <div class="buttons is-hidden ml-3  mt-0 mb-0" data-download-actions>
+              <a class="button is-light" href="/teacher/download-created.csv"><%= t('teacher.csv_download_button') %></a>
+              <a class="button is-light" href="/teacher/download-created.xlsx"><%= t('teacher.excel_download_button') %></a>
+              <a class="button is-light" href="/teacher/download-created.pdf"><%= t('teacher.pdf_download_button') %></a>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    <% } %>
+    <div class="admin-panel">
+      <div class="admin-panel__head">
+        <h2 class="title is-5"><%= t('teacher.manage_students_title') %></h2>
+        <span class="tag is-light"><%= t('teacher.manage_tag') %></span>
+      </div>
+      <div class="admin-panel__body">
+        <% if (!selectedCourseId) { %>
+          <div class="notification is-light"><%= t('teacher.select_course_first') %></div>
+        <% } else { %>
+          <form method="post" action="/teacher/create-users" class="admin-form">
+            <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+            <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+            <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+            <div class="admin-form__grid admin-form__grid--three">
+              <div class="field">
+                <label class="label"><%= t('common.username') %></label>
+                <input class="input" type="text" name="username" required>
+              </div>
+              <div class="field">
+                <label class="label"><%= t('common.display_name') %></label>
+                <input class="input" type="text" name="display_name" required>
+              </div>
+              <div class="field">
+                <label class="label"><%= t('teacher.field_expires') %></label>
+                <input class="input" type="date" name="expires_at">
+              </div>
+              <div class="field">
+                <label class="label"><%= t('teacher.field_password_optional') %></label>
+                <input class="input" type="text" name="password" placeholder="<%= t('teacher.password_optional_placeholder') %>">
+              </div>
+            </div>
+            <div class="admin-form__actions">
+              <button class="button is-link" type="submit">
+                <span class="icon-text">
+                  <span class="icon"><i class="ri-user-add-line" aria-hidden="true"></i></span>
+                  <span><%= t('teacher.create_student_button') %></span>
+                </span>
+              </button>
+            </div>
+          </form>
+          <div class="table-wrap">
+            <table class="table is-fullwidth is-striped is-hoverable">
+              <thead>
+                <tr>
+                  <th>
+                    <label class="checkbox">
+                      <input type="checkbox" id="teacher-select-all" aria-label="<%= t('teacher.select_all_students_label') %>">
+                    </label>
+                  </th>
+                  <th><%= t('teacher.table_name') %></th>
+                  <th><%= t('teacher.table_username') %></th>
+                  <th><%= t('teacher.table_expires') %></th>
+                  <th class="actions-col"><%= t('common.actions') %></th>
+                </tr>
+              </thead>
+              <tbody data-students-body>
+                <% if (!users || !users.length) { %>
+                  <tr><td colspan="5"><em><%= t('teacher.empty_students') %></em></td></tr>
+                <% } else { %>
+                  <% users.forEach(u => { %>
+                    <tr>
+                      <td><input type="checkbox" class="js-user-select" data-user-id="<%= u.id %>"></td>
+                      <td>
+                        <form method="post" action="/teacher/update-user" class="inline-edit inline-edit--full" data-inline-edit>
+                          <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                          <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                          <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                          <input type="hidden" name="user_id" value="<%= u.id %>">
+                          <input type="hidden" name="expires_at" value="<%= u.expires_at || '' %>">
+                          <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= u.display_name %></button>
+                          <div class="inline-edit__editor">
+                            <input class="input is-small inline-edit__input" type="text" name="display_name" value="<%= u.display_name %>" data-inline-edit-input data-original="<%= u.display_name %>" required>
+                            <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                            <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                          </div>
+                        </form>
+                      </td>
+                      <td>
+                        <form method="post" action="/teacher/update-user" class="inline-edit inline-edit--full" data-inline-edit>
+                          <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                          <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                          <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                          <input type="hidden" name="user_id" value="<%= u.id %>">
+                          <input type="hidden" name="display_name" value="<%= u.display_name %>">
+                          <input type="hidden" name="expires_at" value="<%= u.expires_at || '' %>">
+                          <button class="inline-edit__trigger" type="button" data-inline-edit-trigger>
+                            <span class="tag is-light"><%= u.login || u.username %></span>
+                          </button>
+                          <div class="inline-edit__editor">
+                            <input class="input is-small inline-edit__input" type="text" name="username" value="<%= u.username %>" data-inline-edit-input data-original="<%= u.username %>" required>
+                            <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                            <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                          </div>
+                        </form>
+                      </td>
+                      <td>
+                        <form method="post" action="/teacher/update-user" class="inline-edit inline-edit--full" data-inline-edit>
+                          <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                          <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                          <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                          <input type="hidden" name="user_id" value="<%= u.id %>">
+                          <input type="hidden" name="display_name" value="<%= u.display_name %>">
+                          <button class="inline-edit__trigger" type="button" data-inline-edit-trigger><%= u.expires_at || t('common.none') %></button>
+                          <div class="inline-edit__editor">
+                            <input class="input is-small inline-edit__input" type="date" name="expires_at" value="<%= u.expires_at || '' %>" data-inline-edit-input data-original="<%= u.expires_at || '' %>">
+                            <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                            <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                          </div>
+                        </form>
+                      </td>
+                      <td class="admin-table-actions">
+                        <form method="post" action="/teacher/update-user" class="inline-edit" data-inline-edit>
+                          <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                          <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                          <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                          <input type="hidden" name="user_id" value="<%= u.id %>">
+                          <input type="hidden" name="display_name" value="<%= u.display_name %>">
+                          <input type="hidden" name="expires_at" value="<%= u.expires_at || '' %>">
+                          <button class="button is-small is-light inline-edit__trigger" type="button" data-inline-edit-trigger><%= t('teacher.bulk_set_password') %></button>
+                          <div class="inline-edit__editor">
+                            <input class="input is-small inline-edit__input" type="text" name="password" placeholder="<%= t('admin.new_password_placeholder') %>" data-inline-edit-input>
+                            <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                            <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  <% }) %>
+                <% } %>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td></td>
+                  <td colspan="2"><strong><%= t('teacher.bulk_all_selected') %></strong></td>
+                  <td>
+                    <form method="post" action="/teacher/bulk-update" class="inline-edit" data-inline-edit data-bulk-form="expires">
+                      <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                      <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                      <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                      <input type="hidden" name="user_ids" data-bulk-ids>
+                      <input type="hidden" name="password" value="">
+                      <button class="inline-edit__trigger" type="button" data-inline-edit-trigger data-bulk-trigger><%= t('teacher.bulk_set_expires') %></button>
+                      <div class="inline-edit__editor">
+                        <input class="input is-small inline-edit__input" type="date" name="expires_at" data-inline-edit-input data-original="">
+                        <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                        <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                      </div>
+                    </form>
+                  </td>
+                  <td class="admin-table-actions">
+                    <form method="post" action="/teacher/bulk-update" class="inline-edit" data-inline-edit data-bulk-form="password">
+                      <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+                      <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+                      <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+                      <input type="hidden" name="user_ids" data-bulk-ids>
+                      <input type="hidden" name="expires_at" value="">
+                      <button class="button is-small is-light inline-edit__trigger" type="button" data-inline-edit-trigger data-bulk-trigger><%= t('teacher.bulk_set_password') %></button>
+                      <div class="inline-edit__editor">
+                        <input class="input is-small inline-edit__input" type="text" name="password" placeholder="<%= t('admin.new_password_placeholder') %>" data-inline-edit-input>
+                        <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                        <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <form method="post" action="/teacher/delete-users" class="admin-form__actions" id="teacher-bulk-delete">
+            <input type="hidden" name="course_id" value="<%= selectedCourseId %>">
+            <% if (filterSchoolId) { %><input type="hidden" name="school_id" value="<%= filterSchoolId %>"><% } %>
+            <% if (filterTeacherId) { %><input type="hidden" name="teacher_id" value="<%= filterTeacherId %>"><% } %>
+            <input type="hidden" name="user_ids" id="teacher-delete-ids">
+            <button class="button is-danger is-light" type="submit" disabled id="teacher-delete-btn">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-delete-bin-line" aria-hidden="true"></i></span>
+                <span><%= t('teacher.bulk_delete_selected') %></span>
+              </span>
+            </button>
+          </form>
         <% } %>
       </div>
-    </details>
+    </div>
+    <div class="admin-panel">
+      <div class="admin-panel__head">
+        <h2 class="title is-5"><%= t('teacher.sent_panel_title') %></h2>
+        <span class="tag is-light"><%= t('teacher.sent_tag') %></span>
+      </div>
+      <div class="admin-panel__body">
+        <div data-sent-panel>
+          <%- include('partials/teacher_sent_table', {
+            sentOverview,
+            sentPagination,
+            basePath: '/teacher',
+            sentQuery: {
+              ...(selectedSchoolId ? { school_id: selectedSchoolId } : {}),
+              ...(selectedTeacherId ? { teacher_id: selectedTeacherId } : {}),
+              ...(selectedCourseId ? { course_id: selectedCourseId } : {})
+            }
+          }) %>
+        </div>
+      </div>
+    </div>
 
   </div>
 </section>
+<script>
+  (function () {
+    const sentPanel = document.querySelector('[data-sent-panel]');
+    if (sentPanel) {
+      const loadSent = (url) => {
+        const u = new URL(url, window.location.origin);
+        u.searchParams.set('sent_only', '1');
+        return fetch(u.toString(), { headers: { 'X-Requested-With': 'fetch' } })
+          .then((res) => res.text())
+          .then((html) => { sentPanel.innerHTML = html; });
+      };
+
+      sentPanel.addEventListener('click', (e) => {
+        const link = e.target.closest('a[data-sent-link]');
+        if (!link || link.getAttribute('href') === '#') return;
+        e.preventDefault();
+        loadSent(link.href);
+      });
+
+      sentPanel.addEventListener('change', (e) => {
+        const select = e.target.closest('select[data-sent-page-size]');
+        if (!select) return;
+        const form = select.form;
+        if (!form) return;
+        e.preventDefault();
+        const params = new URLSearchParams(new FormData(form));
+        const url = form.action + '?' + params.toString();
+        loadSent(url);
+      });
+    }
+
+    const openUntilEl = document.querySelector('[data-open-until]');
+    const countdownEl = document.querySelector('[data-open-countdown]');
+    if (openUntilEl && countdownEl) {
+      const untilIso = openUntilEl.dataset.openUntil;
+      const until = untilIso ? new Date(untilIso) : null;
+      const tick = () => {
+        if (!until || Number.isNaN(until.getTime())) return;
+        const diff = until.getTime() - Date.now();
+        if (diff <= 0) {
+          countdownEl.textContent = `<%= t('teacher.send_window_ended') %>`;
+          return;
+        }
+        const totalSeconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        countdownEl.textContent = `(${minutes}:${String(seconds).padStart(2, '0')})`;
+        setTimeout(tick, 1000);
+      };
+      tick();
+    }
+
+    const initInlineEdit = (form) => {
+        const trigger = form.querySelector('[data-inline-edit-trigger]');
+        const cancel = form.querySelector('[data-inline-edit-cancel]');
+        const inputs = Array.from(form.querySelectorAll('[data-inline-edit-input]'));
+        if (!trigger || !cancel || !inputs.length) return;
+
+        trigger.addEventListener('click', () => {
+          form.classList.add('is-editing');
+          inputs[0].focus();
+          const value = inputs[0].value || '';
+          inputs[0].setSelectionRange(value.length, value.length);
+        });
+
+        cancel.addEventListener('click', () => {
+          inputs.forEach((input) => {
+            const original = input.dataset.original ?? '';
+            input.value = original;
+          });
+          form.classList.remove('is-editing');
+        });
+      };
+
+      const generatorRoot = document.getElementById('generator-class-profile');
+      if (generatorRoot) {
+        const courseId = document.getElementById('gen-course-id')?.value || '';
+      const countInput = document.getElementById('gen-count');
+      const modeInput = document.getElementById('gen-mode');
+      const modeButtons = Array.from(document.querySelectorAll('[data-mode-btn]'));
+      const genderWarning = document.querySelector('[data-gender-warning]');
+      const regionWarning = document.querySelector('[data-region-warning]');
+      const rulesPanel = document.getElementById('generator-rules');
+      const generatorWrap = document.querySelector('[data-generator-wrap]');
+      const previewPanel = document.getElementById('generator-preview');
+      const simpleCountInputs = Array.from(document.querySelectorAll('[data-simple-count]'));
+      const regionCountRows = Array.from(document.querySelectorAll('[data-region-count-row]'));
+      const expiresInput = document.querySelector('[data-expires-at]');
+      const passwordInput = document.querySelector('[data-password-global]');
+      const previewList = document.querySelector('[data-preview-list]');
+      const previewRefresh = document.querySelector('[data-preview-refresh]');
+      const summaryTotal = document.querySelector('[data-summary-total]');
+      const summaryGender = document.querySelector('[data-summary-gender]');
+      const summaryRegions = document.querySelector('[data-summary-regions]');
+      const generateBtn = document.querySelector('[data-generate]');
+      const confirmBtn = document.querySelector('[data-confirm]');
+      const downloadActions = document.querySelector('[data-download-actions]');
+      const statusBox = document.querySelector('[data-generator-status]');
+      const tableBody = document.querySelector('[data-generated-body]');
+      const columnToggles = Array.from(document.querySelectorAll('[data-col-toggle]'));
+      const columnHeaders = Array.from(document.querySelectorAll('[data-col-header]'));
+
+      let draftEntries = [];
+      let previewTimer = null;
+      let hasTriedBuild = false;
+
+      const setStatus = (message, tone = 'is-light') => {
+        if (!statusBox) return;
+        statusBox.className = `notification ${tone}`;
+        statusBox.textContent = message || '';
+        statusBox.classList.toggle('is-hidden', !message);
+      };
+
+      const hasCourseId = !!courseId;
+      if (!hasCourseId) {
+        generateBtn && (generateBtn.disabled = true);
+        confirmBtn && (confirmBtn.disabled = true);
+        if (previewPanel) previewPanel.classList.add('is-hidden');
+        if (rulesPanel) rulesPanel.classList.add('is-hidden');
+        if (generatorWrap) {
+          generatorWrap.classList.add('is-disabled');
+          generatorWrap.querySelectorAll('input, button, select, textarea').forEach((el) => {
+            if (el.type === 'hidden') return;
+            el.disabled = true;
+          });
+        }
+      }
+
+      const toggleMode = (mode) => {
+        modeButtons.forEach((btn) => {
+          const active = btn.dataset.mode === mode;
+          btn.classList.toggle('is-link', active);
+          btn.classList.toggle('is-light', !active);
+          btn.classList.toggle('is-selected', active);
+        });
+        if (modeInput) modeInput.value = mode;
+        const showAdvanced = mode === 'advanced';
+        if (rulesPanel) rulesPanel.classList.toggle('is-hidden', !showAdvanced);
+        if (generatorWrap) generatorWrap.classList.toggle('is-advanced', showAdvanced);
+        document.querySelectorAll('[data-advanced]').forEach((el) => {
+          el.classList.toggle('is-hidden', !showAdvanced);
+        });
+        document.querySelectorAll('[data-simple]').forEach((el) => {
+          el.classList.toggle('is-hidden', showAdvanced);
+        });
+        updateTotal();
+      };
+
+      const schedulePreview = () => {
+        if (previewTimer) clearTimeout(previewTimer);
+        previewTimer = setTimeout(updatePreview, 250);
+      };
+
+      const parseCount = (value) => Math.max(0, Number(value || 0));
+      const computeTotal = () => {
+        const mode = modeInput?.value || 'simple';
+        if (mode === 'advanced') {
+          return regionCountRows.reduce((sum, row) => {
+            const inputs = Array.from(row.querySelectorAll('[data-region-count]'));
+            return sum + inputs.reduce((acc, input) => acc + parseCount(input.value), 0);
+          }, 0);
+        }
+        return simpleCountInputs.reduce((sum, input) => sum + parseCount(input.value), 0);
+      };
+      const updateTotal = () => {
+        const total = computeTotal();
+        if (countInput) countInput.value = total;
+        return total;
+      };
+
+      if (countInput) updateTotal();
+      simpleCountInputs.forEach((input) => {
+        input.addEventListener('input', () => {
+          updateTotal();
+          schedulePreview();
+        });
+      });
+      regionCountRows.forEach((row) => {
+        row.querySelectorAll('[data-region-count]').forEach((input) => {
+          input.addEventListener('input', () => {
+            updateTotal();
+            schedulePreview();
+          });
+        });
+      });
+
+      modeButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          toggleMode(btn.dataset.mode || 'simple');
+          schedulePreview();
+        });
+      });
+
+      columnToggles.forEach((toggle) => {
+        toggle.addEventListener('change', () => {
+          const key = toggle.dataset.colToggle;
+          const show = toggle.checked;
+          columnHeaders.forEach((header) => {
+            if (header.dataset.colHeader === key) header.classList.toggle('is-hidden', !show);
+          });
+          tableBody?.querySelectorAll(`[data-col-cell=\"${key}\"]`).forEach((cell) => {
+            cell.classList.toggle('is-hidden', !show);
+          });
+        });
+      });
+
+      const readConfig = () => {
+        const comboMode = document.querySelector('input[name=\"combo_mode\"]:checked')?.value || 'typical';
+        const mode = modeInput?.value || 'simple';
+        const total = updateTotal();
+        const payload = {
+          course_id: courseId,
+          count: total,
+          mode,
+          combo_mode: comboMode,
+          expires_at: expiresInput?.value || '',
+          password_global: passwordInput?.value || ''
+        };
+
+        if (mode === 'advanced') {
+          const selectedRegions = [];
+          regionCountRows.forEach((row) => {
+            const key = row.dataset.regionKey;
+            const inputs = Array.from(row.querySelectorAll('[data-region-count]'));
+            const regionTotal = inputs.reduce((sum, input) => sum + parseCount(input.value), 0);
+            if (regionTotal > 0) {
+              selectedRegions.push(key);
+              inputs.forEach((input) => {
+                payload[`region_count_${key}_${input.dataset.gender}`] = parseCount(input.value);
+              });
+            }
+          });
+          payload.regions = selectedRegions;
+          return payload;
+        }
+
+        simpleCountInputs.forEach((input) => {
+          payload[`gender_count_${input.dataset.simpleCount}`] = parseCount(input.value);
+        });
+        return payload;
+      };
+
+      const genderLabels = {
+        female: '<%= t('teacher.gender_female') %>',
+        male: '<%= t('teacher.gender_male') %>',
+        neutral: '<%= t('teacher.gender_neutral') %>',
+        diverse: '<%= t('teacher.gender_neutral') %>'
+      };
+      const regionLabels = {};
+      regionCountRows.forEach((row) => {
+        const key = row.dataset.regionKey;
+        const label = row.querySelector('.region-counts__label')?.textContent?.trim();
+        if (key && label) regionLabels[key] = label;
+      });
+      regionLabels.mixed = '<%= t('teacher.region_mixed') %>';
+
+      const renderSummary = (summary) => {
+        if (!summary) return;
+        if (summaryTotal) summaryTotal.textContent = summary.count || 0;
+        if (summaryGender) {
+          const parts = Object.entries(summary.genders || {}).map(([k, v]) => `${genderLabels[k] || k}: ${v}`);
+          summaryGender.textContent = parts.join(' · ');
+        }
+        if (summaryRegions) {
+          const parts = Object.entries(summary.regions || {}).map(([k, v]) => `${regionLabels[k] || k}: ${v}`);
+          summaryRegions.textContent = parts.length ? parts.join(' · ') : '-';
+        }
+      };
+
+      const renderPreview = (data) => {
+        renderSummary(data.summary);
+        if (genderWarning) genderWarning.classList.toggle('is-hidden', !data.warnings?.gender);
+        if (regionWarning) regionWarning.classList.toggle('is-hidden', !data.warnings?.regions);
+        if (previewList) {
+          previewList.innerHTML = '';
+          (data.sample || []).forEach((row) => {
+            const li = document.createElement('li');
+            const genderLabel = genderLabels[row.gender] || row.gender;
+            const regionLabel = regionLabels[row.region] || row.region;
+            li.textContent = `${row.firstName} ${row.lastName} · ${genderLabel} · ${regionLabel}`;
+            previewList.appendChild(li);
+          });
+        }
+      };
+
+      const renderEntries = () => {
+        if (!tableBody) return;
+        if (!draftEntries.length) {
+          tableBody.innerHTML = `<tr><td colspan=\"8\"><em><%= t('teacher.generator_empty') %></em></td></tr>`;
+          confirmBtn && (confirmBtn.disabled = true);
+          if (downloadActions) downloadActions.classList.add('is-hidden');
+          return;
+        }
+
+        tableBody.innerHTML = draftEntries.map((row) => `
+          <tr data-row-index=\"${row.index}\" class=\"${row.saved ? 'is-selected' : ''}\">
+            <td>${row.index}</td>
+            <td>
+              <form class=\"inline-edit inline-edit--full\" data-inline-edit data-generator-inline-edit data-index=\"${row.index}\" data-field=\"first_name\">
+                <button class=\"inline-edit__trigger\" type=\"button\" data-inline-edit-trigger>${row.firstName}</button>
+                <div class=\"inline-edit__editor\">
+                  <input class=\"input is-small inline-edit__input\" type=\"text\" value=\"${row.firstName}\" data-inline-edit-input data-original=\"${row.firstName}\" required>
+                  <button class=\"button is-small is-success\" type=\"submit\" title=\"<%= t('common.save') %>\">&check;</button>
+                  <button class=\"button is-small is-light\" type=\"button\" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                </div>
+              </form>
+            </td>
+            <td>
+              <form class=\"inline-edit inline-edit--full\" data-inline-edit data-generator-inline-edit data-index=\"${row.index}\" data-field=\"last_name\">
+                <button class=\"inline-edit__trigger\" type=\"button\" data-inline-edit-trigger>${row.lastName}</button>
+                <div class=\"inline-edit__editor\">
+                  <input class=\"input is-small inline-edit__input\" type=\"text\" value=\"${row.lastName}\" data-inline-edit-input data-original=\"${row.lastName}\" required>
+                  <button class=\"button is-small is-success\" type=\"submit\" title=\"<%= t('common.save') %>\">&check;</button>
+                  <button class=\"button is-small is-light\" type=\"button\" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                </div>
+              </form>
+            </td>
+            <td data-col-cell=\"gender\">${genderLabels[row.gender] || row.gender}</td>
+            <td data-col-cell=\"region\">${regionLabels[row.region] || row.region}</td>
+            <td data-col-cell=\"username\"><span class=\"tag is-light\">${row.login || row.username}</span></td>
+            <td data-col-cell=\"password\"><span class=\"tag is-warning is-light\">${row.password}</span></td>
+            <td>
+              <div class=\"buttons are-small generator-row-actions\">
+                <button class=\"button is-light is-small generator-action-icon\" data-action=\"confirm\" title=\"<%= t('teacher.generator_confirm_single') %>\" aria-label=\"<%= t('teacher.generator_confirm_single') %>\" ${row.saved ? 'disabled' : ''}>
+                  <i class=\"ri-check-line\" aria-hidden=\"true\"></i>
+                </button>
+                <button class=\"button is-light is-small generator-action-icon\" data-action=\"regenerate\" title=\"<%= t('teacher.generator_regenerate') %>\" aria-label=\"<%= t('teacher.generator_regenerate') %>\" ${row.saved ? 'disabled' : ''}>
+                  <i class=\"ri-refresh-line\" aria-hidden=\"true\"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+
+        tableBody.querySelectorAll('[data-generator-inline-edit]').forEach((form) => initInlineEdit(form));
+
+        columnToggles.forEach((toggle) => {
+          const key = toggle.dataset.colToggle;
+          const show = toggle.checked;
+          tableBody.querySelectorAll(`[data-col-cell=\"${key}\"]`).forEach((cell) => {
+            cell.classList.toggle('is-hidden', !show);
+          });
+        });
+
+        confirmBtn && (confirmBtn.disabled = false);
+      };
+
+
+      const updatePreview = async () => {
+        if (!hasCourseId) {
+          if (hasTriedBuild) setStatus('<%= t('teacher.select_course_first') %>', 'is-warning');
+          return;
+        }
+        const config = readConfig();
+        if (!config.count) {
+          if (hasTriedBuild) setStatus('<%= t('teacher.generator_count_warning') %>', 'is-warning');
+          return;
+        }
+        if (!config.course_id || (config.mode === 'advanced' && !config.regions?.length)) {
+          if ((config.count || 0) === 0) {
+            setStatus('', 'is-light');
+            return;
+          }
+          if (hasTriedBuild) setStatus('<%= t('teacher.generator_region_required') %>', 'is-warning');
+          return;
+        }
+        setStatus('');
+        try {
+          const res = await fetch('/teacher/generator/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            setStatus(err.error || '<%= t('teacher.generator_preview_failed') %>', 'is-danger');
+            return;
+          }
+          const data = await res.json();
+          renderPreview(data);
+        } catch (err) {
+          setStatus('<%= t('teacher.generator_preview_failed') %>', 'is-danger');
+        }
+      };
+
+      const buildDraft = async () => {
+        hasTriedBuild = true;
+        if (!hasCourseId) {
+          setStatus('<%= t('teacher.select_course_first') %>', 'is-warning');
+          return;
+        }
+        const config = readConfig();
+        if (!config.count) {
+          setStatus('<%= t('teacher.generator_count_warning') %>', 'is-warning');
+          return;
+        }
+        if (!config.course_id || (config.mode === 'advanced' && !config.regions?.length)) {
+          setStatus('<%= t('teacher.generator_region_required') %>', 'is-warning');
+          return;
+        }
+        try {
+          const res = await fetch('/teacher/generator/build', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            setStatus(err.error || '<%= t('teacher.generator_build_failed') %>', 'is-danger');
+            return;
+          }
+          const data = await res.json();
+          draftEntries = data.entries || [];
+          renderEntries();
+          renderPreview(data);
+          if (downloadActions) downloadActions.classList.add('is-hidden');
+        } catch (err) {
+          setStatus('<%= t('teacher.generator_build_failed') %>', 'is-danger');
+        }
+      };
+
+      const postAction = async (url, payload) => {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'error');
+        }
+        return res.json();
+      };
+
+      const handleRowAction = async (event) => {
+        const btn = event.target.closest('[data-action]');
+        if (!btn) return;
+        const row = event.target.closest('tr');
+        const index = Number(row?.dataset.rowIndex || 0);
+        if (!index) return;
+        const entry = draftEntries.find((r) => r.index === index);
+        if (!entry) return;
+
+        try {
+          if (btn.dataset.action === 'confirm') {
+            const data = await postAction('/teacher/generator/confirm-one', { index });
+            Object.assign(entry, data.entry);
+            renderEntries();
+            if (downloadActions) downloadActions.classList.remove('is-hidden');
+            setStatus('<%= t('teacher.generator_confirm_single_ok') %>', 'is-success');
+            if (data.user) insertStudentRow(data.user);
+          }
+          if (btn.dataset.action === 'regenerate') {
+            const data = await postAction('/teacher/generator/regenerate', { index });
+            Object.assign(entry, data.entry);
+            renderEntries();
+          }
+        } catch (err) {
+          setStatus('<%= t('teacher.generator_action_failed') %>', 'is-danger');
+        }
+      };
+
+      if (previewRefresh) previewRefresh.addEventListener('click', updatePreview);
+      if (generateBtn) generateBtn.addEventListener('click', buildDraft);
+      if (confirmBtn) confirmBtn.addEventListener('click', async () => {
+        try {
+          const res = await postAction('/teacher/generator/confirm', {});
+          setStatus(`<%= t('teacher.generator_confirm_ok') %> ${res.createdCount || 0}.`, 'is-success');
+          if (downloadActions) downloadActions.classList.remove('is-hidden');
+          if (Array.isArray(res.users)) {
+            res.users.forEach((user) => insertStudentRow(user));
+          }
+          draftEntries = draftEntries.map((entry) => ({ ...entry, saved: true }));
+          renderEntries();
+        } catch (err) {
+          setStatus('<%= t('teacher.generator_confirm_failed') %>', 'is-danger');
+        }
+      });
+      const buildHiddenInputs = (courseIdValue, schoolIdValue, teacherIdValue) => {
+        const inputs = [
+          `<input type="hidden" name="course_id" value="${courseIdValue || ''}">`
+        ];
+        if (schoolIdValue) inputs.push(`<input type="hidden" name="school_id" value="${schoolIdValue}">`);
+        if (teacherIdValue) inputs.push(`<input type="hidden" name="teacher_id" value="${teacherIdValue}">`);
+        return inputs.join('');
+      };
+
+      const insertStudentRow = (user) => {
+        const studentsBody = document.querySelector('[data-students-body]');
+        if (!studentsBody || !user?.id) return;
+        if (studentsBody.querySelector(`.js-user-select[data-user-id="${user.id}"]`)) return;
+
+        const schoolIdValue = document.querySelector('select[name="school_id"]')?.value || '';
+        const teacherIdValue = document.querySelector('select[name="teacher_id"]')?.value || '';
+        const hiddenInputs = buildHiddenInputs(courseId, schoolIdValue, teacherIdValue);
+        const loginValue = user.login || user.username;
+        const rowHtml = `
+          <tr>
+            <td><input type="checkbox" class="js-user-select" data-user-id="${user.id}"></td>
+            <td>
+              <form method="post" action="/teacher/update-user" class="inline-edit inline-edit--full" data-inline-edit>
+                ${hiddenInputs}
+                <input type="hidden" name="user_id" value="${user.id}">
+                <input type="hidden" name="expires_at" value="${user.expires_at || ''}">
+                <button class="inline-edit__trigger" type="button" data-inline-edit-trigger>${user.display_name || ''}</button>
+                <div class="inline-edit__editor">
+                  <input class="input is-small inline-edit__input" type="text" name="display_name" value="${user.display_name || ''}" data-inline-edit-input data-original="${user.display_name || ''}" required>
+                  <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                  <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                </div>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/teacher/update-user" class="inline-edit inline-edit--full" data-inline-edit>
+                ${hiddenInputs}
+                <input type="hidden" name="user_id" value="${user.id}">
+                <input type="hidden" name="display_name" value="${user.display_name || ''}">
+                <input type="hidden" name="expires_at" value="${user.expires_at || ''}">
+                <button class="inline-edit__trigger" type="button" data-inline-edit-trigger>
+                  <span class="tag is-light">${loginValue}</span>
+                </button>
+                <div class="inline-edit__editor">
+                  <input class="input is-small inline-edit__input" type="text" name="username" value="${user.username || ''}" data-inline-edit-input data-original="${user.username || ''}" required>
+                  <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                  <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                </div>
+              </form>
+            </td>
+            <td>
+              <form method="post" action="/teacher/update-user" class="inline-edit inline-edit--full" data-inline-edit>
+                ${hiddenInputs}
+                <input type="hidden" name="user_id" value="${user.id}">
+                <input type="hidden" name="display_name" value="${user.display_name || ''}">
+                <button class="inline-edit__trigger" type="button" data-inline-edit-trigger>${user.expires_at || '<%= t('common.none') %>'}</button>
+                <div class="inline-edit__editor">
+                  <input class="input is-small inline-edit__input" type="date" name="expires_at" value="${user.expires_at || ''}" data-inline-edit-input data-original="${user.expires_at || ''}">
+                  <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                  <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                </div>
+              </form>
+            </td>
+            <td class="admin-table-actions">
+              <form method="post" action="/teacher/update-user" class="inline-edit" data-inline-edit>
+                ${hiddenInputs}
+                <input type="hidden" name="user_id" value="${user.id}">
+                <input type="hidden" name="display_name" value="${user.display_name || ''}">
+                <input type="hidden" name="expires_at" value="${user.expires_at || ''}">
+                <button class="button is-small is-light inline-edit__trigger" type="button" data-inline-edit-trigger><%= t('teacher.bulk_set_password') %></button>
+                <div class="inline-edit__editor">
+                  <input class="input is-small inline-edit__input" type="text" name="password" placeholder="<%= t('admin.new_password_placeholder') %>" data-inline-edit-input>
+                  <button class="button is-small is-success" type="submit" title="<%= t('common.save') %>">&check;</button>
+                  <button class="button is-small is-light" type="button" data-inline-edit-cancel><%= t('common.cancel') %></button>
+                </div>
+              </form>
+            </td>
+          </tr>
+        `;
+        const wrapper = document.createElement('tbody');
+        wrapper.innerHTML = rowHtml.trim();
+        const newRow = wrapper.querySelector('tr');
+        if (!newRow) return;
+        const emptyRow = studentsBody.querySelector('tr em');
+        if (emptyRow) {
+          emptyRow.closest('tr')?.remove();
+        }
+        studentsBody.appendChild(newRow);
+        newRow.querySelectorAll('[data-inline-edit]').forEach((form) => initInlineEdit(form));
+        syncDeleteState();
+      };
+
+      if (tableBody) {
+        tableBody.addEventListener('click', (event) => {
+          handleRowAction(event);
+        });
+        tableBody.addEventListener('submit', async (event) => {
+          const form = event.target.closest('[data-generator-inline-edit]');
+          if (!form) return;
+          event.preventDefault();
+          const index = Number(form.dataset.index || 0);
+          const entry = draftEntries.find((r) => r.index === index);
+          if (!entry) return;
+          const input = form.querySelector('[data-inline-edit-input]');
+          const value = input?.value?.trim() || '';
+          if (!value) return;
+          const firstName = form.dataset.field === 'first_name' ? value : entry.firstName;
+          const lastName = form.dataset.field === 'last_name' ? value : entry.lastName;
+          try {
+            const data = await postAction('/teacher/generator/update', { index, first_name: firstName, last_name: lastName });
+            Object.assign(entry, data.entry);
+            renderEntries();
+          } catch (err) {
+            setStatus('<%= t('teacher.generator_action_failed') %>', 'is-danger');
+          }
+        });
+      }
+
+      toggleMode(modeInput?.value || 'simple');
+      updatePreview();
+    }
+
+    const editForms = document.querySelectorAll('[data-inline-edit]');
+    editForms.forEach((form) => initInlineEdit(form));
+
+    const deleteForm = document.getElementById('teacher-bulk-delete');
+    const teacherFilterForm = document.querySelector('[data-teacher-filter]');
+    const schoolSelect = document.querySelector('[data-school-select]');
+    const courseSelect = teacherFilterForm?.querySelector('select[name="course_id"]') || null;
+    if (teacherFilterForm && schoolSelect) {
+      schoolSelect.addEventListener('change', () => {
+        if (schoolSelect.value === '' && courseSelect) {
+          courseSelect.value = '';
+          courseSelect.disabled = true;
+        }
+        teacherFilterForm.submit();
+      });
+    }
+    if (teacherFilterForm && courseSelect) {
+      courseSelect.addEventListener('change', () => {
+        teacherFilterForm.submit();
+      });
+    }
+    const deleteIds = document.getElementById('teacher-delete-ids');
+    const deleteBtn = document.getElementById('teacher-delete-btn');
+    const bulkIdInputs = Array.from(document.querySelectorAll('[data-bulk-ids]'));
+    const bulkTriggers = Array.from(document.querySelectorAll('[data-bulk-trigger]'));
+    const bulkForms = Array.from(document.querySelectorAll('[data-bulk-form]'));
+    const selectAll = document.getElementById('teacher-select-all');
+    const getCheckboxes = () => Array.from(document.querySelectorAll('.js-user-select'));
+    if (!deleteForm || !deleteIds || !deleteBtn) return;
+
+    const alertExpires = <%- JSON.stringify(t('teacher.alert_set_expires')) %>;
+    const alertPassword = <%- JSON.stringify(t('teacher.alert_set_password')) %>;
+
+    const syncDeleteState = () => {
+      const checkboxes = getCheckboxes();
+      const selected = checkboxes.filter(box => box.checked).map(box => box.dataset.userId);
+      deleteIds.value = selected.join(',');
+      bulkIdInputs.forEach((input) => {
+        input.value = selected.join(',');
+      });
+      deleteBtn.disabled = !selected.length;
+      bulkTriggers.forEach((btn) => {
+        btn.disabled = !selected.length;
+      });
+      if (selectAll) {
+        selectAll.checked = selected.length === checkboxes.length && checkboxes.length > 0;
+        selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
+      }
+    };
+
+    if (selectAll) {
+      selectAll.addEventListener('change', () => {
+        getCheckboxes().forEach((box) => {
+          box.checked = selectAll.checked;
+        });
+        syncDeleteState();
+      });
+    }
+
+    document.addEventListener('change', (event) => {
+      if (event.target.classList?.contains('js-user-select')) {
+        syncDeleteState();
+      }
+    });
+    deleteForm.addEventListener('submit', (event) => {
+      syncDeleteState();
+      if (!deleteIds.value) event.preventDefault();
+    });
+    bulkForms.forEach((form) => {
+      form.addEventListener('submit', (event) => {
+        syncDeleteState();
+        const ids = bulkIdInputs[0]?.value || '';
+        if (!ids) {
+          event.preventDefault();
+          return;
+        }
+        const type = form.dataset.bulkForm;
+        if (type === 'expires') {
+          const value = form.querySelector('input[name="expires_at"]')?.value || '';
+          if (!value) {
+            event.preventDefault();
+            alert(alertExpires);
+          }
+        }
+        if (type === 'password') {
+          const value = form.querySelector('input[name="password"]')?.value || '';
+          if (!value) {
+            event.preventDefault();
+            alert(alertPassword);
+          }
+        }
+      });
+    });
+  })();
+</script>
 
 <%- include('partials/layout_end', { showSidebar: false }) %>
 <%- include('partials/footer') %>

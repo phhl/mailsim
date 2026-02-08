@@ -1,306 +1,321 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
-const { parse } = require('csv-parse/sync');
+const bcrypt = require('bcryptjs');
 
 const { requireRole } = require('../middleware/auth');
-const { formatEmail } = require('../lib/address');
-const { csvFieldNoQuotes } = require('../utils/csv');
+const { collectStorageNamesByUserIds, deleteAttachmentFiles } = require('../services/attachments');
+const { cleanupSchool } = require('../services/cleanup');
+const { formatLogin } = require('../lib/address');
+const { fetchLogs } = require('../services/logs');
 
 module.exports = function createAdminRouter({ db }) {
   const router = express.Router();
+
+  function getSchoolStats(schoolId) {
+    const courseCount = db.prepare('SELECT COUNT(*) AS count FROM courses WHERE school_id=?').get(schoolId)?.count || 0;
+    const studentCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM users u
+      JOIN courses c ON c.id=u.course_id
+      WHERE c.school_id=?
+    `).get(schoolId)?.count || 0;
+    const teacherCount = db.prepare(`
+      SELECT COUNT(DISTINCT u.id) AS count
+      FROM users u
+      JOIN teacher_courses tc ON tc.user_id=u.id
+      JOIN courses c ON c.id=tc.course_id
+      WHERE c.school_id=?
+    `).get(schoolId)?.count || 0;
+    const schoolAdminCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM users u
+      WHERE u.role='schooladmin' AND u.school_id=?
+    `).get(schoolId)?.count || 0;
+    const messageCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM messages m
+      JOIN users u ON u.id=m.sender_id
+      JOIN courses c ON c.id=u.course_id
+      WHERE c.school_id=?
+    `).get(schoolId)?.count || 0;
+
+    return { courseCount, studentCount, teacherCount, schoolAdminCount, messageCount };
+  }
 
   router.get('/admin/routes', requireRole('admin'), (req, res) => {
     return res.json({
       routes: [
         'GET /admin',
-        'POST /admin/create-users',
-        'POST /admin/import-csv',
-        'POST /admin/delete-users',
-        'GET /admin/download-created.csv',
-        'GET /admin/download-created',
+        'POST /admin/schools/create',
+        'POST /admin/schools/update',
+        'POST /admin/schools/delete',
+        'POST /admin/schooladmins/create',
+        'POST /admin/schooladmins/update',
+        'POST /admin/schooladmins/password',
+        'POST /admin/schooladmins/delete',
         'POST /admin/cleanup-expired',
         'GET /teacher',
         'POST /teacher/send-window/open',
         'POST /teacher/send-window/close',
         'POST /teacher/import-csv',
+        'POST /teacher/generate-users',
         'GET /teacher/download-created.csv',
         'POST /teacher/delete-users',
-        'GET /logs'
+        'GET /schooladmin',
+        'POST /schooladmin/courses/create',
+        'POST /schooladmin/courses/update',
+        'POST /schooladmin/courses/delete',
+        'POST /schooladmin/teachers/create',
+        'POST /schooladmin/teachers/update',
+        'POST /schooladmin/teachers/delete'
       ]
     });
   });
 
   router.get('/admin', requireRole('admin'), (req, res) => {
-    const courseFilter = (req.query.course_id || '').toString().trim();
-    const courses = db.prepare('SELECT id, name FROM courses ORDER BY name').all();
+    req.session.mailViewContext = 'admin';
+    const sizeRaw = Number(req.query.log_page_size || req.session.logPageSize || 20);
+    const allowedSizes = [10, 20, 50, 100];
+    const LOGS_PAGE_SIZE = allowedSizes.includes(sizeRaw) ? sizeRaw : 20;
+    req.session.logPageSize = LOGS_PAGE_SIZE;
+    const pageRaw = Number(req.query.log_page || 1);
+    let logPage = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+    const totalLogs = db.prepare('SELECT COUNT(*) AS count FROM mail_logs').get()?.count || 0;
+    const totalPages = Math.max(1, Math.ceil(totalLogs / LOGS_PAGE_SIZE));
+    if (logPage > totalPages) logPage = totalPages;
+    const logOffset = (logPage - 1) * LOGS_PAGE_SIZE;
 
-    let users = [];
-    if (courseFilter) {
-      users = db.prepare(`
-        SELECT u.id, u.username, u.display_name, u.role, u.expires_at, c.name AS course_name, c.id AS course_id
-        FROM users u LEFT JOIN courses c ON c.id=u.course_id
-        WHERE u.course_id = ?
-        ORDER BY c.name, u.role, u.display_name
-      `).all(Number(courseFilter));
-    } else {
-      users = db.prepare(`
-        SELECT u.id, u.username, u.display_name, u.role, u.expires_at, c.name AS course_name, c.id AS course_id
-        FROM users u LEFT JOIN courses c ON c.id=u.course_id
-        ORDER BY c.name, u.role, u.display_name
-      `).all();
-    }
+    const schools = db.prepare(`
+      SELECT s.id, s.name, s.domain,
+        (SELECT COUNT(*) FROM courses c WHERE c.school_id=s.id) AS course_count,
+        (SELECT COUNT(*) FROM users u JOIN courses c ON c.id=u.course_id WHERE c.school_id=s.id) AS student_count,
+        (SELECT COUNT(DISTINCT u.id) FROM users u JOIN teacher_courses tc ON tc.user_id=u.id JOIN courses c ON c.id=tc.course_id WHERE c.school_id=s.id) AS teacher_count,
+        (SELECT COUNT(*) FROM users u WHERE u.role='schooladmin' AND u.school_id=s.id) AS schooladmin_count,
+        (SELECT COUNT(*) FROM messages m JOIN users u ON u.id=m.sender_id JOIN courses c ON c.id=u.course_id WHERE c.school_id=s.id) AS message_count
+      FROM schools s
+      ORDER BY s.name
+    `).all();
 
-    const messagesStmt = courseFilter
-      ? db.prepare(`
-          SELECT m.id, m.subject, m.created_at,
-                 su.display_name AS sender_name, su.username AS sender_username, sc.name AS sender_course
-          FROM messages m
-          JOIN users su ON su.id=m.sender_id
-          LEFT JOIN courses sc ON sc.id=su.course_id
-          WHERE m.is_draft=0 AND su.course_id = ?
-          ORDER BY m.created_at DESC
-          LIMIT 100
-        `)
-      : db.prepare(`
-          SELECT m.id, m.subject, m.created_at,
-                 su.display_name AS sender_name, su.username AS sender_username, sc.name AS sender_course
-          FROM messages m
-          JOIN users su ON su.id=m.sender_id
-          LEFT JOIN courses sc ON sc.id=su.course_id
-          WHERE m.is_draft=0
-          ORDER BY m.created_at DESC
-          LIMIT 100
-        `);
-
-    const messages = (courseFilter ? messagesStmt.all(Number(courseFilter)) : messagesStmt.all()).map(m => ({
-      ...m,
-      sender_email: formatEmail({ username: m.sender_username, courseName: m.sender_course }, process.env)
+    const schooladminsRaw = db.prepare(`
+      SELECT u.id, u.username, u.display_name, u.expires_at, u.school_id,
+             s.name AS school_name, s.domain AS school_domain
+      FROM users u
+      LEFT JOIN schools s ON s.id=u.school_id
+      WHERE u.role='schooladmin'
+      ORDER BY s.name, u.display_name
+    `).all();
+    const schooladmins = schooladminsRaw.map((u) => ({
+      ...u,
+      login: formatLogin({ username: u.username, domain: u.school_domain, role: 'schooladmin' }, process.env)
     }));
 
-    // Post/Redirect/Get: show one-time import result after CSV upload
-    const importResult = req.session.adminImportResult || null;
-    if (req.session.adminImportResult) delete req.session.adminImportResult;
+    const logs = fetchLogs(db, { scope: 'admin', limit: LOGS_PAGE_SIZE, offset: logOffset });
+    const expiredCount = db.prepare("SELECT COUNT(*) AS count FROM users WHERE expires_at IS NOT NULL AND date(expires_at) < date('now')").get()?.count || 0;
 
-    return res.render('admin', { users, messages, importResult, courses, courseFilter });
-  });
+    const schoolResult = req.session.adminSchoolResult || null;
+    if (req.session.adminSchoolResult) delete req.session.adminSchoolResult;
+    const schoolAdminResult = req.session.adminSchoolAdminResult || null;
+    if (req.session.adminSchoolAdminResult) delete req.session.adminSchoolAdminResult;
+    const adminProfileResult = req.session.adminProfileResult || null;
+    if (req.session.adminProfileResult) delete req.session.adminProfileResult;
 
-  router.post('/admin/create-users', requireRole('admin'), (req, res) => {
-    const courseId = Number(req.body.course_id);
-    if (!Number.isFinite(courseId)) return res.status(400).send('Kurs fehlt.');
-
-    const usernames = [].concat(req.body.username || []);
-    const displayNames = [].concat(req.body.display_name || []);
-    const expires = [].concat(req.body.expires_at || []);
-    const passwords = [].concat(req.body.password || []);
-    const roles = [].concat(req.body.role || []);
-
-    const created = [];
-    const updated = [];
-
-    const tx = db.transaction(() => {
-      for (let i = 0; i < usernames.length; i++) {
-        const username = (usernames[i] || '').toString().trim();
-        if (!username) continue;
-        const display = (displayNames[i] || username).toString().trim() || username;
-        const expires_at = (expires[i] || '').toString().trim() || null;
-        const role = ((roles[i] || 'student').toString().trim()) || 'student';
-        const pwIn = (passwords[i] || '').toString().trim();
-        const pw = pwIn || (Math.random().toString(36).slice(2, 10) + '!');
-        const hash = bcrypt.hashSync(pw, 12);
-
-        const existing = db.prepare('SELECT id FROM users WHERE username=? AND course_id=?').get(username, courseId);
-        if (existing) {
-          db.prepare('UPDATE users SET display_name=?, role=?, expires_at=? WHERE id=?').run(display, role, expires_at, existing.id);
-          updated.push(username);
-        } else {
-          db.prepare('INSERT INTO users(username, display_name, role, course_id, pw_hash, expires_at) VALUES (?,?,?,?,?,?)')
-            .run(username, display, role, courseId, hash, expires_at);
-          created.push({ username, password: pw });
-        }
-      }
-    });
-    tx();
-
-    req.session.lastImportCreated = created;
-    return res.redirect('/admin?course_id=' + encodeURIComponent(String(courseId)));
-  });
-
-  router.post('/admin/import-csv', requireRole('admin'), (req, res) => {
-    const csvText = (req.body.csv || '').toString();
-    if (!csvText.trim()) return res.redirect('/admin');
-
-    // For rendering the admin view in all code paths (including early returns).
-    let courses = db.prepare('SELECT id, name FROM courses ORDER BY name').all();
-    let courseFilter = '';
-
-    let records;
-    try {
-      const firstLine = (csvText.split(/\r?\n/).find(l => l.trim().length) || '');
-      const delimiter =
-        firstLine.includes(';') ? ';' :
-        firstLine.includes('\t') ? '\t' :
-        ',';
-
-      records = parse(csvText, {
-        columns: true,
-        skip_empty_lines: true,
-        trim: true,
-        bom: true,
-        delimiter,
-        relax_quotes: true,
-        relax_column_count: true
-      });
-    } catch (e) {
-      return res.status(400).send('CSV konnte nicht gelesen werden. Erwartet: Header-Zeile (Komma oder Semikolon), z. B. username,display_name,course,expires_at,password,role');
-    }
-
-    if (!records || records.length === 0) {
-      const users = db.prepare(`
-        SELECT u.id, u.username, u.display_name, u.role, u.expires_at, c.name AS course_name
-        FROM users u LEFT JOIN courses c ON c.id=u.course_id
-        ORDER BY c.name, u.role, u.display_name
-      `).all();
-
-      const messages = db.prepare(`
-        SELECT m.id, m.subject, m.created_at,
-               su.display_name AS sender_name, su.username AS sender_username, sc.name AS sender_course
-        FROM messages m
-        JOIN users su ON su.id=m.sender_id
-        LEFT JOIN courses sc ON sc.id=su.course_id
-        WHERE m.is_draft=0
-        ORDER BY m.created_at DESC
-        LIMIT 100
-      `).all().map(m => ({
-        ...m,
-        sender_email: formatEmail({ username: m.sender_username, courseName: m.sender_course }, process.env)
-      }));
-
-      return res.render('admin', {
-        users,
-        messages,
-        courses,
-        courseFilter,
-        importResult: { created: [], updated: [], errors: [{ row: {}, error: 'Keine Datensätze erkannt. Prüfen Sie Trennzeichen (Komma oder Semikolon) und Header.' }] }
+    if (req.query.logs_only === '1') {
+      return res.render('partials/logs_table', {
+        logs,
+        logsPagination: {
+          page: logPage,
+          totalPages,
+          totalLogs,
+          pageSize: LOGS_PAGE_SIZE,
+          pageSizes: allowedSizes
+        },
+        basePath: '/admin',
+        logsQuery: {},
+        emptyMessage: req.t('common.no_entries')
       });
     }
 
-    const ensureCourse = db.prepare('INSERT OR IGNORE INTO courses(name) VALUES (?)');
-    const getCourse = db.prepare('SELECT id FROM courses WHERE name=?');
-    const insUser = db.prepare('INSERT INTO users(username, display_name, role, course_id, pw_hash, expires_at) VALUES (?,?,?,?,?,?)');
-    const updUser = db.prepare('UPDATE users SET display_name=?, role=?, course_id=?, expires_at=? WHERE username=?');
-
-    const created = [];
-    const updated = [];
-    const errors = [];
-
-    const tx = db.transaction(() => {
-      for (const r of records) {
-        const username = (r.username || '').trim();
-        const display = (r.display_name || username).trim() || username;
-        const course = (r.course || 'default').trim() || 'default';
-        const role = (r.role || 'student').trim().toLowerCase();
-        const expires_at = (r.expires_at || '').trim() || null;
-        const password = (r.password || '').trim();
-
-        if (!username) { errors.push({ row: r, error: 'username fehlt' }); continue; }
-        if (!['student','teacher','admin'].includes(role)) { errors.push({ row: r, error: 'role ungültig' }); continue; }
-
-        ensureCourse.run(course);
-        const courseId = getCourse.get(course).id;
-
-        const existing = db.prepare('SELECT id FROM users WHERE username=?').get(username);
-        if (existing) {
-          updUser.run(display, role, courseId, expires_at, username);
-          updated.push(username);
-        } else {
-          const pw = password || (Math.random().toString(36).slice(2, 10) + '!');
-          const hash = bcrypt.hashSync(pw, 12);
-          insUser.run(username, display, role, courseId, hash, expires_at);
-          created.push({ username, password: pw });
-        }
+    return res.render('admin', {
+      schools,
+      schooladmins,
+      logs,
+      expiredCount,
+      schoolResult,
+      schoolAdminResult,
+      adminProfileResult,
+      logsPagination: {
+        page: logPage,
+        totalPages,
+        totalLogs,
+        pageSize: LOGS_PAGE_SIZE,
+        pageSizes: allowedSizes
       }
     });
-    tx();
+  });
 
-    req.session.lastImportCreated = created;
-    req.session.adminImportResult = {
-      createdCount: created.length,
-      updatedCount: updated.length,
-      created,
-      updated,
-      errors
-    };
+  router.post('/admin/profile', requireRole('admin'), (req, res) => {
+    const displayName = (req.body.display_name || '').toString().trim();
+    if (!displayName) {
+      req.session.adminProfileResult = { ok: false, error: req.t('admin.display_name_required') };
+      return res.redirect('/admin');
+    }
 
-    // Post/Redirect/Get: avoid leaving "/admin/import-csv" in the address bar.
+    db.prepare("UPDATE users SET display_name=? WHERE id=? AND role='admin'")
+      .run(displayName, req.session.userId);
+    req.session.display_name = displayName;
+    req.session.adminProfileResult = { ok: true };
     return res.redirect('/admin');
   });
 
-  router.post('/admin/delete-users', requireRole('admin'), (req, res) => {
-    const ids = (req.body.user_ids || '').toString().split(',').map(s => s.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
-    if (!ids.length) return res.redirect('/admin');
+  router.post('/admin/schools/create', requireRole('admin'), (req, res) => {
+    const name = (req.body.name || '').toString().trim();
+    const domain = (req.body.domain || '').toString().trim();
+    if (!name || !domain) {
+      req.session.adminSchoolResult = { ok: false, error: req.t('admin.name_domain_required') };
+      return res.redirect('/admin');
+    }
 
-    const meId = req.session.userId;
-    const filtered = ids.filter(id => id !== meId);
-
-    const tx = db.transaction(() => {
-      for (const id of filtered) db.prepare('DELETE FROM users WHERE id=?').run(id);
-    });
-    tx();
-    return res.redirect('/admin');
-  });
-
-  router.get('/admin/download-created.csv', requireRole('admin'), (req, res) => {
-    const created = req.session.lastImportCreated || [];
-    if (!created.length) return res.status(404).send('No recent import');
-
-    // Unquoted CSV (matches import). We still include course name so Lehrkräfte/Admins can read it.
-    const pwByUser = new Map(created.map(r => [r.username, r.password]));
-    const usernames = [...pwByUser.keys()].filter(Boolean);
-    const placeholders = usernames.map(() => '?').join(',');
-
-    let rows = [];
     try {
-      rows = db
-        .prepare(
-          `SELECT u.username, u.display_name, u.expires_at, u.course_id, c.name AS course_name
-           FROM users u
-           LEFT JOIN courses c ON c.id = u.course_id
-           WHERE u.username IN (${placeholders})`
-        )
-        .all(...usernames);
+      db.prepare('INSERT INTO schools(name, domain) VALUES (?, ?)').run(name, domain);
+      req.session.adminSchoolResult = { ok: true, name, domain };
     } catch (e) {
-      return res.status(500).send(String(e));
+      req.session.adminSchoolResult = { ok: false, error: req.t('admin.school_exists_or_domain_taken') };
     }
-
-    // Preserve original order from the created list.
-    const byUsername = new Map(rows.map(r => [r.username, r]));
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="created-users.csv"');
-    res.write('username,display_name,course,expires_at,password\n');
-
-    for (const row of created) {
-      const info = byUsername.get(row.username) || {};
-      res.write(
-        [
-          csvFieldNoQuotes(row.username),
-          csvFieldNoQuotes(info.display_name),
-          csvFieldNoQuotes(info.course_name || info.course_id),
-          csvFieldNoQuotes(info.expires_at),
-          csvFieldNoQuotes(pwByUser.get(row.username)),
-        ].join(',') + '\n'
-      );
-    }
-
-    return res.end();
+    return res.redirect('/admin');
   });
 
-  router.get('/admin/download-created', requireRole('admin'), (req, res) => {
-    return res.redirect('/admin/download-created.csv');
+  router.post('/admin/schools/update', requireRole('admin'), (req, res) => {
+    const schoolId = Number(req.body.school_id || 0);
+    const name = (req.body.name || '').toString().trim();
+    const domain = (req.body.domain || '').toString().trim();
+    if (!Number.isFinite(schoolId) || !name || !domain) {
+      req.session.adminSchoolResult = { ok: false, error: req.t('admin.name_domain_required') };
+      return res.redirect('/admin');
+    }
+
+    try {
+      db.prepare('UPDATE schools SET name=?, domain=? WHERE id=?').run(name, domain, schoolId);
+      req.session.adminSchoolResult = { ok: true, name, domain };
+    } catch (e) {
+      req.session.adminSchoolResult = { ok: false, error: req.t('admin.update_failed_name_domain') };
+    }
+    return res.redirect('/admin');
+  });
+
+  router.post('/admin/schools/delete', requireRole('admin'), (req, res) => {
+    const schoolId = Number(req.body.school_id || 0);
+    const confirmName = (req.body.confirm_name || '').toString().trim();
+    const school = db.prepare('SELECT id, name FROM schools WHERE id=?').get(schoolId);
+    if (!school) {
+      req.session.adminSchoolResult = { ok: false, error: req.t('admin.school_not_found') };
+      return res.redirect('/admin');
+    }
+
+    const stats = getSchoolStats(schoolId);
+    const needsConfirm = stats.courseCount || stats.studentCount || stats.teacherCount || stats.schoolAdminCount || stats.messageCount;
+    if (needsConfirm && confirmName !== school.name) {
+      req.session.adminSchoolResult = { ok: false, error: req.t('admin.confirm_name_mismatch') };
+      return res.redirect('/admin');
+    }
+
+    const { attachmentNames, userIds } = cleanupSchool(db, schoolId);
+    if (attachmentNames.length) deleteAttachmentFiles(attachmentNames);
+    req.session.adminSchoolResult = { ok: true, name: school.name, deleted: true };
+    return res.redirect('/admin');
+  });
+
+  router.post('/admin/schooladmins/create', requireRole('admin'), (req, res) => {
+    const username = (req.body.username || '').toString().trim();
+    const displayName = (req.body.display_name || '').toString().trim();
+    const schoolId = Number(req.body.school_id || 0);
+    const password = (req.body.password || '').toString().trim();
+
+    if (!username || !displayName || !password || !Number.isFinite(schoolId)) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.all_fields_required') };
+      return res.redirect('/admin');
+    }
+
+    const existingAdmin = db.prepare(`
+      SELECT id FROM users
+      WHERE role='schooladmin' AND lower(username)=lower(?) AND school_id=?
+    `).get(username, schoolId);
+
+    if (existingAdmin) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.username_exists_school') };
+      return res.redirect('/admin');
+    }
+
+    try {
+      const hash = bcrypt.hashSync(password, 12);
+      db.prepare('INSERT INTO users(username, display_name, role, school_id, pw_hash) VALUES (?,?,?,?,?)')
+        .run(username, displayName, 'schooladmin', schoolId, hash);
+      req.session.adminSchoolAdminResult = { ok: true };
+    } catch (e) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.schooladmin_exists') };
+    }
+    return res.redirect('/admin');
+  });
+
+  router.post('/admin/schooladmins/update', requireRole('admin'), (req, res) => {
+    const userId = Number(req.body.user_id || 0);
+    const displayName = (req.body.display_name || '').toString().trim();
+    const schoolId = Number(req.body.school_id || 0);
+    if (!Number.isFinite(userId) || !displayName || !Number.isFinite(schoolId)) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.all_fields_required') };
+      return res.redirect('/admin');
+    }
+
+    db.prepare("UPDATE users SET display_name=?, school_id=? WHERE id=? AND role='schooladmin'")
+      .run(displayName, schoolId, userId);
+    req.session.adminSchoolAdminResult = { ok: true };
+    return res.redirect('/admin');
+  });
+
+  router.post('/admin/schooladmins/password', requireRole('admin'), (req, res) => {
+    const userId = Number(req.body.user_id || 0);
+    const password = (req.body.password || '').toString().trim();
+    if (!Number.isFinite(userId) || !password) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.password_missing') };
+      return res.redirect('/admin');
+    }
+
+    const hash = bcrypt.hashSync(password, 12);
+    db.prepare("UPDATE users SET pw_hash=? WHERE id=? AND role='schooladmin'").run(hash, userId);
+    req.session.adminSchoolAdminResult = { ok: true };
+    return res.redirect('/admin');
+  });
+
+  router.post('/admin/schooladmins/delete', requireRole('admin'), (req, res) => {
+    const userId = Number(req.body.user_id || 0);
+    const confirmName = (req.body.confirm_name || '').toString().trim();
+    if (!Number.isFinite(userId)) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.schooladmin_missing') };
+      return res.redirect('/admin');
+    }
+
+    const target = db.prepare("SELECT id, display_name FROM users WHERE id=? AND role='schooladmin'").get(userId);
+    if (!target) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.schooladmin_missing') };
+      return res.redirect('/admin');
+    }
+    if (!confirmName || confirmName !== target.display_name) {
+      req.session.adminSchoolAdminResult = { ok: false, error: req.t('admin.confirm_name_mismatch_schooladmin') };
+      return res.redirect('/admin');
+    }
+
+    const attachmentNames = collectStorageNamesByUserIds(db, [userId]);
+    db.prepare("DELETE FROM users WHERE id=? AND role='schooladmin'").run(userId);
+    deleteAttachmentFiles(attachmentNames);
+    req.session.adminSchoolAdminResult = { ok: true };
+    return res.redirect('/admin');
   });
 
   router.post('/admin/cleanup-expired', requireRole('admin'), (req, res) => {
+    const expiredIds = db.prepare(
+      "SELECT id FROM users WHERE expires_at IS NOT NULL AND date(expires_at) < date('now')"
+    ).all().map(r => r.id);
+    const attachmentNames = collectStorageNamesByUserIds(db, expiredIds);
     db.prepare("DELETE FROM users WHERE expires_at IS NOT NULL AND date(expires_at) < date('now')").run();
+    deleteAttachmentFiles(attachmentNames);
     return res.redirect('/admin');
   });
 

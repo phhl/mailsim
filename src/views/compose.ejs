@@ -1,232 +1,536 @@
-<%
-const quillHead = `
-<link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
-<style>
-  .chip{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .5rem;border-radius:999px;background:#f5f5f5;margin:.15rem}
-  .chip button{border:0;background:transparent;cursor:pointer}
-  .suggest{border:1px solid #dbdbdb;border-top:0;max-height:180px;overflow:auto}
-  .suggest a{display:block;padding:.4rem .6rem}
-  .suggest a:hover{background:#f5f5f5}
-</style>
-`;
-%>
-<%- include('partials/header', { title: 'Verfassen', me, extraHead: quillHead }) %>
-<%- include('partials/layout_start', { showSidebar: true, activeFolder: 'INBOX' }) %>
+<% const quillHead=` <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
+    <style>
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .2rem .5rem;
+            border-radius: 999px;
+            background: #f5f5f5;
+            margin: .15rem
+        }
 
-<h1 class="title is-4">E‑Mail verfassen</h1>
+        .chip button {
+            border: 0;
+            background: transparent;
+            cursor: pointer
+        }
 
-<% if (error) { %>
-  <div class="notification is-danger is-light"><%= error %></div>
-<% } %>
+        .suggest {
+            border: 1px solid #dbdbdb;
+            border-top: 0;
+            max-height: 180px;
+            overflow: auto
+        }
 
-<% if (me.role === 'student' && !me.send_window_open) { %>
-  <div class="notification is-warning is-light">
-    Versand ist aktuell gesperrt. Entwürfe können gespeichert werden; zum Senden muss die Lehrkraft das Versandfenster öffnen.
-  </div>
-<% } %>
+        .suggest a {
+            display: block;
+            padding: .4rem .6rem
+        }
 
-<div class="box">
-  <form method="post" action="/compose" id="composeForm">
-    <div class="field">
-      <label class="label">An (To)</label>
-      <div class="control">
-        <input class="input" id="toInput" type="text" placeholder="Adresse eingeben und Enter drücken …">
-      </div>
-      <div id="toChips"></div>
-      <div id="toSuggest" class="suggest is-hidden"></div>
-    </div>
+        .suggest a:hover {
+            background: #f5f5f5
+        }
 
-    <div class="compose-grid"><div class="columns">
-      <div class="column">
-        <label class="label">CC</label>
-        <input class="input" id="ccInput" type="text" placeholder="Adresse eingeben und Enter drücken …">
-        <div id="ccChips"></div>
-        <div id="ccSuggest" class="suggest is-hidden"></div>
-      </div>
-      <div class="column">
-        <label class="label">BCC</label>
-        <input class="input" id="bccInput" type="text" placeholder="Adresse eingeben und Enter drücken …">
-        <div id="bccChips"></div>
-        <div id="bccSuggest" class="suggest is-hidden"></div>
-        <p class="help">BCC-Empfänger bleiben in der Schüleransicht verborgen; Lehrkraft und Admin sehen sie.</p>
-      </div>
-    </div></div>
+        .addressbook-trigger {
+            min-width: 42px
+        }
 
-    <div class="field">
-      <label class="label">Betreff</label>
-      <div class="control">
-        <input class="input" name="subject" value="<%= preset.subject %>" required maxlength="200">
-      </div>
-    </div>
+        .addressbook-list {
+            border: 1px solid #dbdbdb;
+            border-radius: 6px;
+            max-height: 360px;
+            overflow: auto
+        }
 
-    <div class="field">
-      <label class="label">Nachricht</label>
-      <div id="editor" style="height: 220px;"></div>
-      <input type="hidden" name="body_html" id="body_html">
-      <!--
+        .addressbook-group-title {
+            padding: .5rem .75rem .25rem;
+            font-weight: 600;
+            background: #fafafa;
+            border-bottom: 1px solid #eee
+        }
+
+        .addressbook-course-title {
+            padding: .4rem .75rem .2rem;
+            font-size: .85rem;
+            color: #666
+        }
+
+        .addressbook-entry {
+            width: 100%;
+            text-align: left;
+            border: 0;
+            background: transparent;
+            padding: .4rem .75rem;
+            cursor: pointer;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem
+        }
+
+        .addressbook-entry:hover {
+            background: #f5f5f5
+        }
+
+        .addressbook-hint {
+            font-size: .8rem;
+            color: #8a8a8a
+        }
+    </style>
+    `;
+    %>
+    <%- include('partials/header', { title: t('compose.title') , me, extraHead: quillHead }) %>
+        <%- include('partials/layout_start', { showSidebar: true, activeFolder: (returnFolder || 'INBOX') }) %>
+
+            <h1 class="title is-4">
+                <span class="icon-text">
+                    <span class="icon"><i class="ri-edit-2-line" aria-hidden="true"></i></span>
+                    <span><%= t('compose.heading') %></span>
+                </span>
+            </h1>
+
+            <% if (error) { %>
+                <div class="notification is-danger is-light">
+                    <%= error %>
+                </div>
+                <% } %>
+
+                    <% if (me.role==='student' && !me.send_window_open) { %>
+                        <div class="notification is-warning is-light">
+                            <%= t('compose.send_locked_notice') %>
+                        </div>
+                        <% } %>
+
+                            <div class="box">
+                                <form method="post" action="/compose" id="composeForm" enctype="multipart/form-data">
+                                    <% const fromLabel=me ? `${me.display_name || me.username} <${me.email}>` : ''; %>
+                                        <div class="field">
+                                            <label class="label"><%= t('compose.from') %></label>
+                                            <div class="control">
+                                                <input class="input" type="text" value="<%= fromLabel %>" readonly>
+                                            </div>
+                                        </div>
+                                        <div class="field">
+                                            <label class="label"><%= t('compose.to') %></label>
+                                            <div class="field has-addons">
+                                                <div class="control is-expanded">
+                                                    <input class="input" id="toInput" type="text" placeholder="">
+                                                </div>
+                                                <div class="control">
+                                                    <button class="button is-light addressbook-trigger" type="button" data-kind="to"
+                                                        aria-label="<%= t('compose.open_addressbook') %>">
+                                                        <span class="icon"><i class="ri-contacts-book-line" aria-hidden="true"></i></span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div id="toChips"></div>
+                                            <div id="toSuggest" class="suggest is-hidden"></div>
+                                        </div>
+
+                                        <div class="compose-grid">
+                                            <div class="columns">
+                                                <div class="column">
+                                                    <label class="label"><%= t('compose.cc') %></label>
+                                                    <div class="field has-addons">
+                                                        <div class="control is-expanded">
+                                                            <input class="input" id="ccInput" type="text" placeholder="">
+                                                        </div>
+                                                        <div class="control">
+                                                            <button class="button is-light addressbook-trigger" type="button" data-kind="cc"
+                                                                aria-label="<%= t('compose.open_addressbook') %>">
+                                                                <span class="icon"><i class="ri-contacts-book-line" aria-hidden="true"></i></span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div id="ccChips"></div>
+                                                    <div id="ccSuggest" class="suggest is-hidden"></div>
+                                                </div>
+                                                <div class="column">
+                                                    <label class="label"><%= t('compose.bcc') %></label>
+                                                    <div class="field has-addons">
+                                                        <div class="control is-expanded">
+                                                            <input class="input" id="bccInput" type="text" placeholder="">
+                                                        </div>
+                                                        <div class="control">
+                                                            <button class="button is-light addressbook-trigger" type="button" data-kind="bcc"
+                                                                aria-label="<%= t('compose.open_addressbook') %>">
+                                                                <span class="icon"><i class="ri-contacts-book-line" aria-hidden="true"></i></span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div id="bccChips"></div>
+                                                    <div id="bccSuggest" class="suggest is-hidden"></div>
+                                                    <p class="help"></p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="field">
+                                            <label class="label"><%= t('compose.subject') %></label>
+                                            <div class="control">
+                                                <input class="input" name="subject" value="<%= preset.subject %>"
+                                                    required maxlength="200">
+                                            </div>
+                                        </div>
+
+                                        <div class="field">
+                                            <label class="label"><%= t('compose.attachments_label') %></label>
+                                            <% const attachmentsDisabled = (me.role === 'student' && !me.attachments_allowed); %>
+                                            <div class="control">
+                                                <input class="input" type="file" name="attachments" multiple
+                                                    accept=".png,.jpg,.jpeg,.gif,.webp,.heic,.heif,.pdf,application/pdf,image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif"
+                                                    <%= attachmentsDisabled ? 'disabled' : '' %>>
+                                            </div>
+                                            <p class="help"><%= t('compose.attachments_help') %></p>
+                                            <% if (attachmentsDisabled) { %>
+                                                <div class="notification is-warning is-light mt-2">
+                                                    <%= t('compose.attachments_disabled_notice') %>
+                                                </div>
+                                            <% } %>
+                                            <% if (existingAttachments && existingAttachments.length) { %>
+                                                <p class="has-text-weight-semibold mt-3"><%= t('compose.attachments_existing_title') %></p>
+                                                <ul>
+                                                    <% existingAttachments.forEach(att => { %>
+                                                        <li>
+                                                            <a href="/attachments/<%= att.id %>"><%= att.original_name %></a>
+                                                            <span class="has-text-grey">(<%= att.size_label %>)</span>
+                                                        </li>
+                                                    <% }) %>
+                                                </ul>
+                                            <% } %>
+                                        </div>
+
+                                        <div class="field">
+                                            <label class="label"><%= t('compose.message') %></label>
+                                            <div id="editor" style="height: 220px;"></div>
+                                            <input type="hidden" name="body_html" id="body_html">
+                                            <input type="hidden" name="draft_id" value="<%= (preset && preset.draft_id) ? preset.draft_id : '' %>">
+                                            <input type="hidden" name="return_folder" value="<%= (preset && preset.return_folder) ? preset.return_folder : (returnFolder || 'INBOX') %>">
+                                            <!--
         Server-side erwartet JSON-Arrays mit Nutzer-IDs in den Feldern
         to_ids / cc_ids / bcc_ids.
-        (Vorher wurden hier to/cc/bcc verwendet – dadurch wurden Empfänger nicht gespeichert.)
+        (Vorher wurden hier to/cc/bcc verwendet; dadurch wurden Empfaenger nicht gespeichert.)
       -->
-      <!-- Hidden fields consumed by POST /compose. Keep ids as to/cc/bcc because JS writes to them. -->
-      <input type="hidden" name="to_ids" id="to" value="<%= (preset && preset.to ? preset.to : []).join(',') %>">
-      <input type="hidden" name="cc_ids" id="cc" value="<%= (preset && preset.cc ? preset.cc : []).join(',') %>">
-      <input type="hidden" name="bcc_ids" id="bcc" value="<%= (preset && preset.bcc ? preset.bcc : []).join(',') %>">
-    </div>
+                                            <!-- Hidden fields consumed by POST /compose. Keep ids as to/cc/bcc because JS writes to them. -->
+                                            <input type="hidden" name="to_ids" id="to"
+                                                value="<%= (preset && preset.to ? preset.to : []).join(',') %>">
+                                            <input type="hidden" name="cc_ids" id="cc"
+                                                value="<%= (preset && preset.cc ? preset.cc : []).join(',') %>">
+                                            <input type="hidden" name="bcc_ids" id="bcc"
+                                                value="<%= (preset && preset.bcc ? preset.bcc : []).join(',') %>">
+                                        </div>
 
-    <div class="field is-grouped">
-      <div class="control">
-        <button class="button is-link" type="submit" name="action" value="send" <%= (me.role==='student' && !me.send_window_open) ? 'disabled' : '' %>>Senden</button>
-      </div>
-      <div class="control">
-        <button class="button is-light" type="submit" name="action" value="draft">Als Entwurf speichern</button>
-      </div>
-      <div class="control">
-        <a class="button is-text" href="/mailbox/INBOX">Abbrechen</a>
-      </div>
-    </div>
-  </form>
-</div>
+                                        <div class="field is-grouped">
+                                            <div class="control">
+                                                <button class="button is-link" type="submit" name="action" value="send"
+                                                    <%=(me.role==='student' && !me.send_window_open) ? 'disabled' : ''
+                                                    %>>
+                                                    <span class="icon-text">
+                                                        <span class="icon"><i class="ri-send-plane-2-line" aria-hidden="true"></i></span>
+                                                        <span><%= t('compose.send') %></span>
+                                                    </span>
+                                                </button>
+                                            </div>
+                                            <div class="control">
+                                                <button class="button is-light" type="submit" name="action"
+                                                    value="draft">
+                                                    <span class="icon-text">
+                                                        <span class="icon"><i class="ri-draft-line" aria-hidden="true"></i></span>
+                                                        <span><%= t('compose.save_draft') %></span>
+                                                    </span>
+                                                </button>
+                                            </div>
+                                            <div class="control">
+                                                <a class="button is-text" href="/mailbox/<%= (returnFolder || 'INBOX') %>">
+                                                    <span class="icon-text">
+                                                        <span class="icon"><i class="ri-close-line" aria-hidden="true"></i></span>
+                                                        <span><%= t('compose.cancel') %></span>
+                                                    </span>
+                                                </a>
+                                            </div>
+                                        </div>
+                                </form>
+                            </div>
 
-<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
-<script>
-  const quill = new Quill('#editor', {
-    theme: 'snow',
-    modules: {
-      toolbar: [
-        ['bold','italic','underline'],
-        [{ list: 'ordered' }, { list: 'bullet' }],
-        ['link'],
-        ['clean']
-      ]
-    }
-  });
+                            <div class="modal" id="addressbookModal" aria-hidden="true">
+                                <div class="modal-background"></div>
+                                <div class="modal-card">
+                                    <header class="modal-card-head">
+                                        <p class="modal-card-title"><%= t('compose.addressbook_title') %></p>
+                                        <button class="delete" type="button" aria-label="<%= t('common.close') %>"></button>
+                                    </header>
+                                    <section class="modal-card-body">
+                                        <div class="field">
+                                            <div class="control has-icons-left">
+                                                <input class="input" id="addressbookSearch" type="text"
+                                                    placeholder="<%= t('compose.addressbook_search_placeholder') %>">
+                                                <span class="icon is-left">
+                                                    <i class="ri-search-line" aria-hidden="true"></i>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="addressbook-list" id="addressbookList"></div>
+                                    </section>
+                                    <footer class="modal-card-foot">
+                                        <button class="button" type="button" id="addressbookClose"><%= t('common.close') %></button>
+                                    </footer>
+                                </div>
+                            </div>
 
-  const presetHtml = `<%- (preset.body_html || '').replaceAll('`', '\`') %>`;
-  if (presetHtml) quill.clipboard.dangerouslyPasteHTML(presetHtml);
+                            <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+                            <script>
+                                const quill = new Quill('#editor', {
+                                    theme: 'snow',
+                                    modules: {
+                                        toolbar: [
+                                            ['bold', 'italic', 'underline'],
+                                            [{ list: 'ordered' }, { list: 'bullet' }],
+                                            ['link'],
+                                            ['clean']
+                                        ]
+                                    }
+                                });
 
-  const state = {
-    to: new Map(),
-    cc: new Map(),
-    bcc: new Map()
-  };
+                                const addressNotFoundTemplate = <%- JSON.stringify(t('compose.address_not_found')) %>;
+                                const removeRecipientLabel = <%- JSON.stringify(t('compose.remove_recipient')) %>;
+                                const addressbookUsers = <%- JSON.stringify(users || []) %>;
+                                const addressbookEmptyLabel = <%- JSON.stringify(t('compose.addressbook_empty')) %>;
+                                const addressbookNoSchoolLabel = <%- JSON.stringify(t('compose.addressbook_no_school')) %>;
+                                const addressbookNoCourseLabel = <%- JSON.stringify(t('compose.addressbook_no_course')) %>;
+                                const addressbookTeachersLabel = <%- JSON.stringify(t('compose.addressbook_teachers')) %>;
+                                const presetHtml = <%- JSON.stringify(preset.body_html || '') %>;
+                                if (presetHtml) quill.clipboard.dangerouslyPasteHTML(presetHtml);
 
-  function renderChips(kind) {
-    const wrap = document.getElementById(kind + 'Chips');
-    wrap.innerHTML = '';
-    for (const [id, label] of state[kind].entries()) {
-      const chip = document.createElement('span');
-      chip.className = 'chip';
-      chip.innerHTML = `<span>${label}</span><button type="button" aria-label="remove">×</button>`;
-      chip.querySelector('button').addEventListener('click', () => {
-        state[kind].delete(id);
-        renderChips(kind);
-      });
-      wrap.appendChild(chip);
-    }
-  }
+                                const state = {
+                                    to: new Map(),
+                                    cc: new Map(),
+                                    bcc: new Map()
+                                };
 
-  async function resolveAndAdd(kind, term) {
-    term = (term || '').trim();
-    if (!term) return;
-    const res = await fetch('/resolve?term=' + encodeURIComponent(term));
-    const data = await res.json();
-    if (!data.ok) {
-      alert('Adresse nicht gefunden: ' + term);
-      return;
-    }
-    state[kind].set(String(data.id), data.label);
-    renderChips(kind);
-  }
+                                function renderChips(kind) {
+                                    const wrap = document.getElementById(kind + 'Chips');
+                                    wrap.innerHTML = '';
+                                    for (const [id, label] of state[kind].entries()) {
+                                        const chip = document.createElement('span');
+                                        chip.className = 'chip';
+                                        chip.innerHTML = `<span>${label}</span><button type="button" aria-label="${removeRecipientLabel}">&times;</button>`;
+                                        chip.querySelector('button').addEventListener('click', () => {
+                                            state[kind].delete(id);
+                                            renderChips(kind);
+                                        });
+                                        wrap.appendChild(chip);
+                                    }
+                                }
 
-  let activeFetch = 0;
-  async function showSuggestions(kind, q) {
-    const box = document.getElementById(kind + 'Suggest');
-    if (!q || q.trim().length < 2) {
-      box.classList.add('is-hidden');
-      box.innerHTML = '';
-      return;
-    }
-    const token = ++activeFetch;
-    const res = await fetch('/addressbook?q=' + encodeURIComponent(q));
-    const items = await res.json();
-    if (token !== activeFetch) return;
+                                const addressbookModal = document.getElementById('addressbookModal');
+                                const addressbookList = document.getElementById('addressbookList');
+                                const addressbookSearch = document.getElementById('addressbookSearch');
+                                let addressbookKind = 'to';
 
-    box.innerHTML = '';
-    if (!items.length) {
-      box.classList.add('is-hidden');
-      return;
-    }
-    for (const it of items) {
-      const a = document.createElement('a');
-      a.href = '#';
-      a.textContent = it.label;
-      a.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        state[kind].set(String(it.id), it.label);
-        renderChips(kind);
-        document.getElementById(kind + 'Input').value = '';
-        box.classList.add('is-hidden');
-      });
-      box.appendChild(a);
-    }
-    box.classList.remove('is-hidden');
-  }
+                                function sortAddressbook(users) {
+                                    return users.slice().sort((a, b) => {
+                                        const aSchool = (a.school_domain || '').toLowerCase();
+                                        const bSchool = (b.school_domain || '').toLowerCase();
+                                        if (aSchool !== bSchool) return aSchool.localeCompare(bSchool, 'de', { sensitivity: 'base' });
+                                        const aCourseLabel = (a.course_name || (a.role === 'teacher' ? addressbookTeachersLabel : addressbookNoCourseLabel)).toLowerCase();
+                                        const bCourseLabel = (b.course_name || (b.role === 'teacher' ? addressbookTeachersLabel : addressbookNoCourseLabel)).toLowerCase();
+                                        const aCourseOrder = (a.role === 'teacher' && !a.course_name) ? 0 : 1;
+                                        const bCourseOrder = (b.role === 'teacher' && !b.course_name) ? 0 : 1;
+                                        if (aCourseOrder !== bCourseOrder) return aCourseOrder - bCourseOrder;
+                                        if (aCourseLabel !== bCourseLabel) return aCourseLabel.localeCompare(bCourseLabel, 'de', { sensitivity: 'base' });
+                                        return (a.label || '').toLowerCase().localeCompare((b.label || '').toLowerCase(), 'de', { sensitivity: 'base' });
+                                    });
+                                }
 
-  function wire(kind) {
-    const input = document.getElementById(kind + 'Input');
-    if (!input) return;
+                                function renderAddressbook(query) {
+                                    const q = (query || '').toLowerCase();
+                                    const filtered = addressbookUsers.filter(u => {
+                                        if (!q) return true;
+                                        const hay = `${u.label} ${u.course_name || ''} ${u.school_domain || ''}`.toLowerCase();
+                                        return hay.includes(q);
+                                    });
 
-    input.addEventListener('input', () => showSuggestions(kind, input.value));
-    input.addEventListener('keydown', async (ev) => {
-      if (ev.key === 'Enter' || ev.key === ',') {
-        ev.preventDefault();
-        const value = input.value.replace(/,$/, '');
-        await resolveAndAdd(kind, value);
-        input.value = '';
-        document.getElementById(kind + 'Suggest').classList.add('is-hidden');
-      }
-      if (ev.key === 'Escape') {
-        document.getElementById(kind + 'Suggest').classList.add('is-hidden');
-      }
-    });
+                                    addressbookList.innerHTML = '';
+                                    if (!filtered.length) {
+                                        const empty = document.createElement('p');
+                                        empty.className = 'has-text-grey';
+                                        empty.textContent = addressbookEmptyLabel;
+                                        addressbookList.appendChild(empty);
+                                        return;
+                                    }
 
-    document.addEventListener('click', (ev) => {
-      const box = document.getElementById(kind + 'Suggest');
-      if (!box.contains(ev.target) && ev.target !== input) box.classList.add('is-hidden');
-    });
-  }
+                                    const sorted = sortAddressbook(filtered);
+                                    let currentSchool = null;
+                                    let currentCourse = null;
+                                    for (const u of sorted) {
+                                        const school = u.school_domain || addressbookNoSchoolLabel;
+                                        const course = u.course_name || (u.role === 'teacher' ? addressbookTeachersLabel : addressbookNoCourseLabel);
 
-  wire('to'); wire('cc'); wire('bcc');
+                                        if (school !== currentSchool) {
+                                            const schoolEl = document.createElement('div');
+                                            schoolEl.className = 'addressbook-group-title';
+                                            schoolEl.textContent = school;
+                                            addressbookList.appendChild(schoolEl);
+                                            currentSchool = school;
+                                            currentCourse = null;
+                                        }
 
-  // presets (ids passed in query -> server filled preset arrays)
-  const presetTo = <%- JSON.stringify(preset.to || []) %>;
-  const presetCc = <%- JSON.stringify(preset.cc || []) %>;
-  const presetBcc = <%- JSON.stringify(preset.bcc || []) %>;
+                                        if (course !== currentCourse) {
+                                            const courseEl = document.createElement('div');
+                                            courseEl.className = 'addressbook-course-title';
+                                            courseEl.textContent = course;
+                                            addressbookList.appendChild(courseEl);
+                                            currentCourse = course;
+                                        }
 
-  async function hydratePreset(kind, ids) {
-    for (const id of ids) {
-            try {
-        const r = await fetch('/userlabel?id=' + encodeURIComponent(id));
-        const d = await r.json();
-        if (d.ok) state[kind].set(String(d.id), d.label);
-        else state[kind].set(String(id), '#' + id);
-      } catch { state[kind].set(String(id), '#' + id); }
-    }
-    renderChips(kind);
-  }
-  hydratePreset('to', presetTo);
-  hydratePreset('cc', presetCc);
-  hydratePreset('bcc', presetBcc);
+                                        const entry = document.createElement('button');
+                                        entry.type = 'button';
+                                        entry.className = 'addressbook-entry';
+                                        const labelSpan = document.createElement('span');
+                                        labelSpan.textContent = u.label;
+                                        entry.appendChild(labelSpan);
+                                        const teacherCourses = (u.role === 'teacher')
+                                            ? ((u.teacher_courses || '').trim() || (u.course_name || '').trim())
+                                            : '';
+                                        if (teacherCourses) {
+                                            const hint = document.createElement('span');
+                                            hint.className = 'addressbook-hint';
+                                            hint.textContent = teacherCourses;
+                                            entry.appendChild(hint);
+                                        }
+                                        entry.addEventListener('click', () => {
+                                            state[addressbookKind].set(String(u.id), u.label);
+                                            renderChips(addressbookKind);
+                                            closeAddressbook();
+                                        });
+                                        addressbookList.appendChild(entry);
+                                    }
+                                }
 
-  document.getElementById('composeForm').addEventListener('submit', (ev) => {
-    document.getElementById('body_html').value = quill.root.innerHTML;
-    document.getElementById('to').value = Array.from(state.to.keys()).join(',');
-    document.getElementById('cc').value = Array.from(state.cc.keys()).join(',');
-    document.getElementById('bcc').value = Array.from(state.bcc.keys()).join(',');
-  });
-</script>
+                                function openAddressbook(kind) {
+                                    addressbookKind = kind;
+                                    addressbookModal.classList.add('is-active');
+                                    addressbookSearch.value = '';
+                                    renderAddressbook('');
+                                    addressbookSearch.focus();
+                                }
 
-<%- include('partials/layout_end', { showSidebar: true }) %>
+                                function closeAddressbook() {
+                                    addressbookModal.classList.remove('is-active');
+                                }
 
-<%- include('partials/footer') %>
+                                async function resolveAndAdd(kind, term) {
+                                    term = (term || '').trim();
+                                    if (!term) return;
+                                    const res = await fetch('/resolve?term=' + encodeURIComponent(term));
+                                    const data = await res.json();
+                                    if (!data.ok) {
+                                        alert(addressNotFoundTemplate.replace('{term}', term));
+                                        return;
+                                    }
+                                    state[kind].set(String(data.id), data.label);
+                                    renderChips(kind);
+                                }
+
+                                let activeFetch = 0;
+                                async function showSuggestions(kind, q) {
+                                    const box = document.getElementById(kind + 'Suggest');
+                                    if (!q || q.trim().length < 2) {
+                                        box.classList.add('is-hidden');
+                                        box.innerHTML = '';
+                                        return;
+                                    }
+                                    const token = ++activeFetch;
+                                    const res = await fetch('/addressbook?q=' + encodeURIComponent(q));
+                                    const items = await res.json();
+                                    if (token !== activeFetch) return;
+
+                                    box.innerHTML = '';
+                                    if (!items.length) {
+                                        box.classList.add('is-hidden');
+                                        return;
+                                    }
+                                    for (const it of items) {
+                                        const a = document.createElement('a');
+                                        a.href = '#';
+                                        a.textContent = it.label;
+                                        a.addEventListener('click', (ev) => {
+                                            ev.preventDefault();
+                                            state[kind].set(String(it.id), it.label);
+                                            renderChips(kind);
+                                            document.getElementById(kind + 'Input').value = '';
+                                            box.classList.add('is-hidden');
+                                        });
+                                        box.appendChild(a);
+                                    }
+                                    box.classList.remove('is-hidden');
+                                }
+
+                                function wire(kind) {
+                                    const input = document.getElementById(kind + 'Input');
+                                    if (!input) return;
+
+                                    input.addEventListener('input', () => showSuggestions(kind, input.value));
+                                    input.addEventListener('keydown', async (ev) => {
+                                        if (ev.key === 'Enter' || ev.key === ',') {
+                                            ev.preventDefault();
+                                            const value = input.value.replace(/,$/, '');
+                                            await resolveAndAdd(kind, value);
+                                            input.value = '';
+                                            document.getElementById(kind + 'Suggest').classList.add('is-hidden');
+                                        }
+                                        if (ev.key === 'Escape') {
+                                            document.getElementById(kind + 'Suggest').classList.add('is-hidden');
+                                        }
+                                    });
+
+                                    document.addEventListener('click', (ev) => {
+                                        const box = document.getElementById(kind + 'Suggest');
+                                        if (!box.contains(ev.target) && ev.target !== input) box.classList.add('is-hidden');
+                                    });
+                                }
+
+                                document.querySelectorAll('.addressbook-trigger').forEach(btn => {
+                                    btn.addEventListener('click', () => openAddressbook(btn.dataset.kind || 'to'));
+                                });
+                                document.getElementById('addressbookClose').addEventListener('click', closeAddressbook);
+                                document.querySelector('#addressbookModal .modal-background').addEventListener('click', closeAddressbook);
+                                document.querySelector('#addressbookModal .delete').addEventListener('click', closeAddressbook);
+                                addressbookSearch.addEventListener('input', () => renderAddressbook(addressbookSearch.value));
+                                document.addEventListener('keydown', (ev) => {
+                                    if (ev.key === 'Escape' && addressbookModal.classList.contains('is-active')) closeAddressbook();
+                                });
+
+                                wire('to'); wire('cc'); wire('bcc');
+
+                                // presets (ids passed in query -> server filled preset arrays)
+                                const presetTo = <%- JSON.stringify(preset.to || []) %>;
+                                const presetCc = <%- JSON.stringify(preset.cc || []) %>;
+                                const presetBcc = <%- JSON.stringify(preset.bcc || []) %>;
+
+                                async function hydratePreset(kind, ids) {
+                                    for (const id of ids) {
+                                        try {
+                                            const r = await fetch('/userlabel?id=' + encodeURIComponent(id));
+                                            const d = await r.json();
+                                            if (d.ok) state[kind].set(String(d.id), d.label);
+                                            else state[kind].set(String(id), '#' + id);
+                                        } catch { state[kind].set(String(id), '#' + id); }
+                                    }
+                                    renderChips(kind);
+                                }
+                                hydratePreset('to', presetTo);
+                                hydratePreset('cc', presetCc);
+                                hydratePreset('bcc', presetBcc);
+
+                                document.getElementById('composeForm').addEventListener('submit', (ev) => {
+                                    document.getElementById('body_html').value = quill.root.innerHTML;
+                                    document.getElementById('to').value = Array.from(state.to.keys()).join(',');
+                                    document.getElementById('cc').value = Array.from(state.cc.keys()).join(',');
+                                    document.getElementById('bcc').value = Array.from(state.bcc.keys()).join(',');
+                                });
+                            </script>
+
+                            <%- include('partials/layout_end', { showSidebar: true }) %>
+
+                                <%- include('partials/footer') %>

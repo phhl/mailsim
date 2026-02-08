@@ -1,0 +1,160 @@
+<%- include('partials/header', { title: t('setup.title'), me: null, extraHead: '' }) %>
+
+<div class="columns is-centered">
+  <div class="column is-8">
+    <div class="box">
+      <h1 class="title is-4">
+        <span class="icon-text">
+          <span class="icon"><i class="ri-settings-3-line" aria-hidden="true"></i></span>
+          <span><%= t('setup.heading') %></span>
+        </span>
+      </h1>
+      <p class="subtitle is-6"><%= t('setup.subtitle') %></p>
+
+      <% if (error) { %>
+        <div class="notification is-danger is-light"><%= error %></div>
+      <% } %>
+      <% if (success) { %>
+        <div class="notification is-success is-light"><%= success %></div>
+      <% } %>
+      <% if (restartNotice) { %>
+        <div class="notification is-warning is-light"><%= restartNotice %></div>
+      <% } %>
+
+      <form method="post" action="/setup">
+        <h2 class="title is-6"><%= t('setup.section_security') %></h2>
+        <div class="field">
+          <label class="label"><%= t('setup.session_secret_label') %></label>
+          <div class="field has-addons">
+            <div class="control is-expanded">
+              <input class="input" id="session-secret-input" type="text" name="session_secret" value="<%= defaults.session_secret %>" required>
+            </div>
+            <div class="control">
+              <button class="button is-light" type="button" id="session-secret-generate"><%= t('setup.session_secret_generate') %></button>
+            </div>
+          </div>
+          <p class="help"><%= t('setup.session_secret_help') %></p>
+        </div>
+
+        <hr>
+        <h2 class="title is-6"><%= t('setup.section_admin') %></h2>
+        <div class="columns is-variable is-2">
+          <div class="column">
+            <div class="field">
+              <label class="label"><%= t('setup.admin_user_label') %></label>
+              <div class="control">
+                <input class="input" type="text" name="default_admin_user" value="<%= defaults.default_admin_user %>" required>
+              </div>
+            </div>
+          </div>
+          <div class="column">
+            <div class="field">
+              <label class="label"><%= t('setup.admin_pass_label') %></label>
+              <div class="control">
+                <input class="input" type="text" name="default_admin_pass" value="" required>
+              </div>
+              <p class="help"><%= t('setup.admin_pass_help') %></p>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+        <h2 class="title is-6"><%= t('setup.section_roles') %></h2>
+        <div class="columns is-variable is-2">
+          <div class="column">
+            <div class="field">
+              <label class="label"><%= t('setup.teacher_can_see_bcc_label') %></label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="teacher_can_see_bcc">
+                    <option value="1" <%= String(defaults.teacher_can_see_bcc) === '1' ? 'selected' : '' %>><%= t('setup.option_yes') %></option>
+                    <option value="0" <%= String(defaults.teacher_can_see_bcc) === '0' ? 'selected' : '' %>><%= t('setup.option_no') %></option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="column">
+            <div class="field">
+              <label class="label"><%= t('setup.teacher_can_create_label') %></label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="teacher_can_create">
+                    <option value="1" <%= String(defaults.teacher_can_create) === '1' ? 'selected' : '' %>><%= t('setup.option_yes') %></option>
+                    <option value="0" <%= String(defaults.teacher_can_create) === '0' ? 'selected' : '' %>><%= t('setup.option_no') %></option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label"><%= t('setup.send_window_minutes_label') %></label>
+          <div class="control">
+            <input class="input" type="number" min="1" max="240" name="send_window_minutes" value="<%= defaults.send_window_minutes %>" required>
+          </div>
+          <p class="help"><%= t('setup.send_window_minutes_help') %></p>
+        </div>
+
+        <hr>
+        <h2 class="title is-6"><%= t('setup.section_auto') %></h2>
+        <p class="help"><%= t('setup.auto_create_help') %></p>
+        <div class="columns is-variable is-2">
+          <div class="column">
+            <div class="field">
+              <label class="label"><%= t('setup.auto_create_max_label') %></label>
+              <div class="control">
+                <input class="input" type="number" min="1" name="auto_create_max" value="<%= defaults.auto_create_max %>">
+              </div>
+            </div>
+          </div>
+          <div class="column">
+            <div class="field">
+              <label class="label"><%= t('setup.name_api_timeout_ms_label') %></label>
+              <div class="control">
+                <input class="input" type="number" min="1" name="name_api_timeout_ms" value="<%= defaults.name_api_timeout_ms %>">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label"><%= t('setup.name_api_url_label') %></label>
+          <div class="control">
+            <input class="input" type="text" name="name_api_url" value="<%= defaults.name_api_url %>">
+          </div>
+        </div>
+        <div class="field">
+          <label class="label"><%= t('setup.name_api_nat_label') %></label>
+          <div class="control">
+            <input class="input" type="text" name="name_api_nat" value="<%= defaults.name_api_nat %>">
+          </div>
+        </div>
+
+        <div class="field mt-4">
+          <button class="button is-link is-fullwidth" type="submit">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-save-3-line" aria-hidden="true"></i></span>
+              <span><%= t('common.save') %></span>
+            </span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const input = document.getElementById("session-secret-input");
+    const button = document.getElementById("session-secret-generate");
+    if (!input || !button || !window.crypto) return;
+    button.addEventListener("click", () => {
+      const bytes = new Uint8Array(32);
+      window.crypto.getRandomValues(bytes);
+      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      input.value = hex;
+    });
+  })();
+</script>
+
+<%- include('partials/footer') %>

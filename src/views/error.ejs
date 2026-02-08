@@ -1,0 +1,21 @@
+<%- include('partials/header', { title: title || t('errors.title'), me }) %>
+<%- include('partials/layout_start', { showSidebar: false }) %>
+
+<section class="section">
+  <div class="container is-widescreen">
+    <article class="message is-danger is-light">
+      <div class="message-header">
+        <p><%= title || t('errors.title') %></p>
+      </div>
+      <div class="message-body">
+        <p><%= message || t('errors.not_allowed') %></p>
+        <div class="mt-4">
+          <a class="button is-light" href="<%= backUrl || '/' %>"><%= t('errors.back') %></a>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<%- include('partials/layout_end', { showSidebar: false }) %>
+<%- include('partials/footer') %>

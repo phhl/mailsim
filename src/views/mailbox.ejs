@@ -1,29 +1,43 @@
-<%- include('partials/header', { title: `Mailbox ${folder}`, me, extraHead: '' }) %>
+<%- include('partials/header', { title: t('mailbox.title', { folder: (folderLabel || folder) }), me, extraHead: '' }) %>
 <%- include('partials/layout_start', { showSidebar: true, activeFolder: folder }) %>
 
-<h1 class="title is-4"><%= folder %></h1>
+<%
+  const folderIcons = {
+    INBOX: 'ri-inbox-archive-line',
+    SENT: 'ri-send-plane-line',
+    DRAFTS: 'ri-draft-line',
+    TRASH: 'ri-delete-bin-line'
+  };
+  const folderIcon = folderIcons[String(folder || '').toUpperCase()] || 'ri-mail-line';
+%>
+<h1 class="title is-4">
+  <span class="icon-text">
+    <span class="icon"><i class="<%= folderIcon %>" aria-hidden="true"></i></span>
+    <span><%= folderLabel || folder %></span>
+  </span>
+</h1>
 
 <% if (!items.length) { %>
-  <div class="notification is-light">Keine Nachrichten.</div>
+  <div class="notification is-light"><%= t('mailbox.empty') %></div>
 <% } else { %>
   <div class="table-wrap">
 <table class="table is-fullwidth is-hoverable mail-list">
     <thead>
       <tr>
         <% const showStatus = (folder === 'INBOX' || folder === 'TRASH'); %>
-        <% if (showStatus) { %><th>Status</th><% } %>
-        <th>Von</th>
-        <th>Betreff</th>
-        <th>Vorschau</th>
-        <th>Datum</th>
+        <% if (showStatus) { %><th><%= t('common.status') %></th><% } %>
+        <th><%= t('common.from') %></th>
+        <th><%= t('common.subject') %></th>
+        <th><%= t('common.preview') %></th>
+        <th><%= t('common.date') %></th>
       </tr>
     </thead>
     <tbody>
       <% items.forEach(it => { %>
-        <tr>
-          <% if (showStatus) { %><td><%= it.is_read ? 'gelesen' : 'neu' %></td><% } %>
+        <tr class="mail-row" data-href="/mail/<%= it.message_id %>?folder=<%= folder %>">
+          <% if (showStatus) { %><td><%= it.is_read ? t('mailbox.read') : t('mailbox.unread') %></td><% } %>
           <td><%= it.sender_name %> &lt;<%= it.sender_email %>&gt;</td>
-          <td><a href="/mail/<%= it.message_id %>"><%= it.subject %></a></td>
+          <td><%= it.subject %></td>
           <td class="mail-snippet"><%= it.snippet %></td>
           <td><%= (it.created_at_local || it.created_at) %></td>
         </tr>
@@ -34,5 +48,16 @@
 <% } %>
 
 <%- include('partials/layout_end', { showSidebar: true }) %>
+
+<script>
+  document.querySelectorAll('.mail-row').forEach((row) => {
+    row.addEventListener('click', (event) => {
+      const link = event.target.closest('a');
+      if (link) return;
+      const href = row.dataset.href;
+      if (href) window.location.href = href;
+    });
+  });
+</script>
 
 <%- include('partials/footer') %>

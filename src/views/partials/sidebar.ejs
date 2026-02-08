@@ -1,9 +1,29 @@
 <aside class="menu">
-  <p class="menu-label">Ordner</p>
+  <p class="menu-label"><%= t('sidebar.folders') %></p>
   <ul class="menu-list">
-    <li><a href="/mailbox/INBOX" class="<%= (activeFolder==='INBOX')?'is-active':'' %>">Posteingang</a></li>
-    <li><a href="/mailbox/SENT" class="<%= (activeFolder==='SENT')?'is-active':'' %>">Gesendet</a></li>
-    <li><a href="/mailbox/DRAFTS" class="<%= (activeFolder==='DRAFTS')?'is-active':'' %>">Entwürfe</a></li>
-    <li><a href="/mailbox/TRASH" class="<%= (activeFolder==='TRASH')?'is-active':'' %>">Papierkorb</a></li>
+    <li><a href="/mailbox/INBOX" class="<%= (activeFolder==='INBOX')?'is-active':'' %>">
+      <span class="icon-text">
+        <span class="icon"><i class="ri-inbox-archive-line" aria-hidden="true"></i></span>
+        <span><%= t('sidebar.inbox') %></span>
+      </span>
+    </a></li>
+    <li><a href="/mailbox/SENT" class="<%= (activeFolder==='SENT')?'is-active':'' %>">
+      <span class="icon-text">
+        <span class="icon"><i class="ri-send-plane-line" aria-hidden="true"></i></span>
+        <span><%= t('sidebar.sent') %></span>
+      </span>
+    </a></li>
+    <li><a href="/mailbox/DRAFTS" class="<%= (activeFolder==='DRAFTS')?'is-active':'' %>">
+      <span class="icon-text">
+        <span class="icon"><i class="ri-draft-line" aria-hidden="true"></i></span>
+        <span><%= t('sidebar.drafts') %></span>
+      </span>
+    </a></li>
+    <li><a href="/mailbox/TRASH" class="<%= (activeFolder==='TRASH')?'is-active':'' %>">
+      <span class="icon-text">
+        <span class="icon"><i class="ri-delete-bin-line" aria-hidden="true"></i></span>
+        <span><%= t('sidebar.trash') %></span>
+      </span>
+    </a></li>
   </ul>
 </aside>

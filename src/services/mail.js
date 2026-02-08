@@ -44,24 +44,45 @@ function addDelivery(db, messageId, ownerUserId, folder, isRead=0) {
     .run(messageId, ownerUserId, folder, isRead ? 1 : 0);
 }
 
-function sendOrDraft(db, sender, payload) {
-  const senderId = sender.id;
-  const senderRole = sender.role;
+function applyDeliveriesAndLogs(db, { messageId, senderId, to, cc, bcc, isDraft }) {
+  if (isDraft) {
+    addDelivery(db, messageId, senderId, 'DRAFTS', 1);
+    return;
+  }
 
-  const data = ComposeSchema.parse(payload);
+  addDelivery(db, messageId, senderId, 'SENT', 1);
+  for (const uid of [...to, ...cc, ...bcc]) addDelivery(db, messageId, uid, 'INBOX', 0);
 
-  // De-dup recipients across TO/CC/BCC, keeping first occurrence order
+  const logRes = db.prepare('INSERT INTO mail_logs(message_id, sender_id) VALUES (?,?)').run(messageId, senderId);
+  const logId = logRes.lastInsertRowid;
+  const insLogRec = db.prepare('INSERT INTO mail_log_recipients(log_id, user_id, type) VALUES (?,?,?)');
+  for (const uid of to) insLogRec.run(logId, uid, 'TO');
+  for (const uid of cc) insLogRec.run(logId, uid, 'CC');
+  for (const uid of bcc) insLogRec.run(logId, uid, 'BCC');
+}
+
+function normalizeRecipients(senderId, data) {
   const seen = new Set();
   const norm = (arr) => arr.filter(id => {
-    if (id === senderId) return false; // don't allow self as recipient
+    if (id === senderId) return false;
     if (seen.has(id)) return false;
     seen.add(id);
     return true;
   });
+  return {
+    to: norm(data.to),
+    cc: norm(data.cc),
+    bcc: norm(data.bcc)
+  };
+}
 
-  const to = norm(data.to);
-  const cc = norm(data.cc);
-  let bcc = norm(data.bcc);
+function sendOrDraft(db, sender, payload) {
+  const senderId = sender.id;
+
+  const data = ComposeSchema.parse(payload);
+
+  // De-dup recipients across TO/CC/BCC, keeping first occurrence order
+  const { to, cc, bcc } = normalizeRecipients(senderId, data);
 
   // BCC ist erlaubt (auch für Schüler:innen). In der Schüleransicht wird die BCC-Liste später ausgeblendet.
 
@@ -77,26 +98,49 @@ function sendOrDraft(db, sender, payload) {
     addRecipients(db, messageId, cc, 'CC');
     addRecipients(db, messageId, bcc, 'BCC');
 
-    if (isDraft) {
-      addDelivery(db, messageId, senderId, 'DRAFTS', 1);
-    } else {
-      // sender copy
-      addDelivery(db, messageId, senderId, 'SENT', 1);
-// recipients inbox
-for (const uid of [...to, ...cc, ...bcc]) addDelivery(db, messageId, uid, 'INBOX', 0);
-
-// Protokoll (ohne Inhalte)
-const logRes = db.prepare('INSERT INTO mail_logs(message_id, sender_id) VALUES (?,?)').run(messageId, senderId);
-const logId = logRes.lastInsertRowid;
-const insLogRec = db.prepare('INSERT INTO mail_log_recipients(log_id, user_id, type) VALUES (?,?,?)');
-for (const uid of to) insLogRec.run(logId, uid, 'TO');
-for (const uid of cc) insLogRec.run(logId, uid, 'CC');
-for (const uid of bcc) insLogRec.run(logId, uid, 'BCC');
-    }
+    applyDeliveriesAndLogs(db, { messageId, senderId, to, cc, bcc, isDraft: !!isDraft });
     return { messageId, threadId, isDraft };
   });
 
   return tx();
 }
 
-module.exports = { sendOrDraft, ComposeSchema };
+function updateDraftOrSend(db, sender, payload, draftId) {
+  const senderId = sender.id;
+  const data = ComposeSchema.parse(payload);
+
+  const draft = db.prepare(
+    'SELECT id, thread_id, parent_message_id FROM messages WHERE id=? AND sender_id=? AND is_draft=1',
+  ).get(draftId, senderId);
+  if (!draft) throw new Error('Entwurf nicht gefunden.');
+
+  const { to, cc, bcc } = normalizeRecipients(senderId, data);
+  if (data.action === 'send' && (to.length + cc.length + bcc.length) === 0) {
+    throw new Error('Mindestens ein Empfaenger (To/CC/BCC) ist erforderlich.');
+  }
+
+  const tx = db.transaction(() => {
+    const body_html = sanitizeBody(data.body_html);
+    const body_text = htmlToText(body_html);
+    const isDraft = data.action === 'draft' ? 1 : 0;
+
+    db.prepare(
+      'UPDATE messages SET subject=?, body_html=?, body_text=?, is_draft=? WHERE id=? AND sender_id=?',
+    ).run(data.subject, body_html, body_text, isDraft, draftId, senderId);
+
+    db.prepare('DELETE FROM recipients WHERE message_id=?').run(draftId);
+    addRecipients(db, draftId, to, 'TO');
+    addRecipients(db, draftId, cc, 'CC');
+    addRecipients(db, draftId, bcc, 'BCC');
+
+    db.prepare('DELETE FROM deliveries WHERE message_id=?').run(draftId);
+
+    applyDeliveriesAndLogs(db, { messageId: draftId, senderId, to, cc, bcc, isDraft: !!isDraft });
+
+    return { messageId: draftId, threadId: draft.thread_id, isDraft: !!isDraft };
+  });
+
+  return tx();
+}
+
+module.exports = { sendOrDraft, updateDraftOrSend, ComposeSchema };

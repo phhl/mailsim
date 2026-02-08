@@ -1,119 +1,94 @@
-# Didaktischer Mail‑Simulator (Node/Express + SQLite)
+﻿# Didaktischer Mail-Simulator (Node/Express + SQLite)
 
-Ziel: geschlossene Mail‑Simulation für Unterricht (To/CC/BCC, Betreff, Posteingang/Gesendet/Entwürfe/Papierkorb), ohne Versand nach außen.
+Ziel: geschlossene Mail-Simulation für Unterricht (To/CC/BCC, Betreff, Posteingang/Gesendet/Entwürfe/Papierkorb), ohne Versand nach außen.
+
+## Features
+- Rollen: **Admin**, **Schuladmin**, **Lehrkraft**, **Schüler**.
+- Mailboxen mit **INBOX / SENT / DRAFTS / TRASH** inkl. Threading, Reply/Reply-All/Forward.
+- BCC-Sichtbarkeit steuerbar (Lehrkraft optional, Admin/Schuladmin immer).
+- Versandfenster pro Kurs inkl. optionaler **Anhang-Freigabe** für Schüler.
+- Anhänge mit Typ-Whitelist (PDF, PNG, JPEG, GIF, WebP, HEIC) und Größen-/Anzahl-Limits.
+- Kurs-/Schulverwaltung, CSV-Import, Nutzer-Generator, Exporte (CSV/XLSX/PDF).
+- Protokollierung: Mail-Logs ohne Inhaltstext für Admin/Schuladmin.
+- I18n: Locale-Dateien unter `src/locales/` (Standard: `de`).
 
 ## Voraussetzungen
 - Node.js 18+ (empfohlen 20+)
 - npm
 
-## Installation
+## Schnellstart
 ```bash
 npm install
 npm run initdb
 npm run dev
 ```
+Danach im Browser: http://localhost:3000
 
-Dann im Browser:
-- http://localhost:3000
+## Ersteinrichtung (Setup-Flow)
+Wenn Pflicht-Env-Keys fehlen, leitet die App auf `/setup` um.
+Dort werden Session-Secret und Admin-Zugang gesetzt und die `.env` aktualisiert.
 
 ## Standard-Zugang (nach initdb)
-- Admin: `admin` / `admin123!` (bitte sofort ändern oder in `.env` anpassen)
+- Admin: `admin` / `admin123!` (bitte direkt ändern oder in `.env` anpassen)
 
-## Code-Organisation (Codex-friendly)
-Die Anwendung ist absichtlich in **Bootstrap**, **App-Wiring** und **Feature-Routen** getrennt:
+## Rollen & Rechte (Kurzfassung)
+- **Admin**: globale Sicht, Schulen/Kurse/Schuladmins verwalten, Logs einsehen.
+- **Schuladmin**: eigene Schule verwalten, Kurse/Lehrkräfte pflegen, Logs der Schule.
+- **Lehrkraft**: Kursverwaltung, Versandfenster, Schülerkonten, Kursweite Einsicht (nur Schüler-Mails im eigenen Kurs).
+- **Schüler**: kursinternes Mailen; Senden nur bei geöffnetem Versandfenster.
 
-- `src/server.js`:
-  - Startet den HTTP-Server (`app.listen(...)`).
-  - Enthält keine Geschäftslogik.
-- `src/app.js`:
-  - Erstellt und konfiguriert die Express-App (Middleware, Sessions, Views, Static, DB-Init).
-  - Registriert die Router.
-  - Exportiert `{ app, db }`.
-- `src/routes/*`:
-  - Feature-spezifische Routen.
-  - `auth.js` (Login/Logout)
-  - `mail.js` (Mailbox, Lesen, Compose, Reply/Forward, Addressbook)
-  - `teacher.js` (Logs, Versandfenster, CSV/Benutzerverwaltung innerhalb des Kurses)
-  - `admin.js` (Kurse/Nutzer/Import/Exports/Cleanup)
-- `src/services/*`:
-  - Geschäftslogik/Helper mit stabilen, testbaren Schnittstellen.
-  - z. B. `sendWindow.js`, `visibility.js`.
-- `src/utils/*`:
-  - Kleine, pure Helper (`time.js`, `csv.js`).
+## Login-Format
+- **Admin**: `username` (z. B. `admin`)
+- **Schuladmin**: `username@schule-domain` (z. B. `sa@alpha.edu`)
+- **Lehrkraft**: `username@schule-domain` (z. B. `t_a1@alpha.edu`)
+- **Schüler**: `username@kurs.schule-domain` (z. B. `s_a1_1@A1.alpha.edu`)
 
-## Architektur-Überblick
+## Konfiguration (.env)
+Wichtige Keys (siehe `.env.example`):
+- `PORT`, `SESSION_SECRET`, `REDIS_URL` (optional, sonst MemoryStore)
+- `DB_PATH` (Default: `./data/app.db`)
+- `SOCKET_PATH`, `SOCKET_MODE` (optional für Unix-Socket)
+- `DEFAULT_ADMIN_USER`, `DEFAULT_ADMIN_PASS` (nur für `initdb`)
+- `TEACHER_CAN_SEE_BCC` (0/1), `TEACHER_CAN_CREATE` (0/1)
+- `SEND_WINDOW_MINUTES` (Default-Dauer)
+- `ATTACHMENTS_DIR`, `ATTACHMENTS_MAX_MB`, `ATTACHMENTS_MAX_FILES`
+- `MAIL_DOMAIN_TEMPLATE`, `MAIL_DOMAIN` (Anzeige von Login/Adresse)
+- `DEFAULT_LOCALE` (z. B. `de`)
+- `ASSET_VERSION` (Cache-Busting)
+- `FORCE_SETUP=1` (erzwingt Setup-Flow)
+- `TEACHER_NAME_API_*` (Namens-Generator via randomuser.me)
 
-### Datenmodell (vereinfacht)
-- `users` + `courses`: Benutzer, Rollen (student/teacher/admin) und Kurszuordnung.
-- `messages`: Nachricht (Betreff, Body, Sender, Draft-Flag).
-- `recipients`: Empfängerliste (TO/CC/BCC) pro Nachricht.
-- `deliveries`: Zustellungen pro Benutzer und Ordner (INBOX/SENT/DRAFTS/TRASH). Ein `message` kann viele `deliveries` haben.
-- `mail_logs` + `mail_log_recipients`: Protokollierung für Lehrer/Admin (ohne Nachrichtentexte).
-- `course_send_windows`: Versandfenster pro Kurs (Zeitfenster, in dem Schüler senden dürfen).
+### Domain-Format (@-Teil)
+`MAIL_DOMAIN_TEMPLATE={course}.{domain}`
+- `{course}` Kurs/Gruppe (Fallback: `default`)
+- `{domain}` Basisdomain (via `MAIL_DOMAIN` oder Schul-Domain)
 
-### Request-Flows
+## Datenmodell & Migrationen
+- Schema: `src/db/schema.sql` (idempotent).
+- Beim App-Start werden Schema-Erweiterungen geprüft und ggf. migriert (siehe `src/app.js`).
+- Anhänge liegen im Dateisystem (`data/attachments`), Metadaten in SQLite.
 
-**1) Login**
-- `GET /login` zeigt Formular.
-- `POST /login` prüft Passwort-Hash und setzt Session (`userId`, `role`).
+## Scripts
+- `npm run dev` – Start mit Entwicklungs-Env
+- `npm run start` – Production-Start
+- `npm run initdb` – DB initialisieren, Admin anlegen
+- `npm run seed` – Demo-Daten (mit `SEED_FORCE=1` auch bei vorhandenen Daten)
+- `npm run build` – Build-Verzeichnis erzeugen
+- `npm run start:build` – Build starten (erzwingt Setup)
 
-**2) Mailbox anzeigen**
-- `GET /mailbox/:folder` lädt die letzten Zustellungen des Ordners aus `deliveries` und zeigt sie in `views/mailbox.ejs`.
+## Build & Deploy
+`npm run build` kopiert Quellcode, Assets und `data/` (ohne `.db` und `.env`) nach `./build`.
+Mit `INCLUDE_NODE_MODULES=1` werden `node_modules` mitkopiert.
 
-**3) Nachricht lesen**
-- `GET /mail/:id` lädt `messages` + Senderdaten.
-- Zugriff:
-  - Admin: jede Nachricht.
-  - Student: nur Nachrichten, für die es eine eigene `delivery` gibt.
-  - Teacher: eigene `deliveries` plus kursweite Sicht auf von Schülern gesendete Mails des eigenen Kurses (Detailansicht).
-
-**4) Schreiben/Senden/Entwurf**
-- `GET /compose` lädt „sichtbare“ Empfänger (kursintern + teacher/admin).
-- `POST /compose`:
-  - action=`draft` → speichert Entwurf (DRAFTS).
-  - action=`send` → erzeugt `messages`, `recipients` und `deliveries` (SENT beim Sender, INBOX bei Empfängern).
-  - Für Schüler gilt: Senden nur bei geöffnetem Versandfenster (`course_send_windows`).
-
-**5) Teacher: Versandfenster / Kursverwaltung**
-- `POST /teacher/send-window/open` setzt `open_until` für den Kurs.
-- `POST /teacher/send-window/close` schließt das Versandfenster.
-- CSV-Import/Erzeugung löscht oder erstellt/aktualisiert Kurs-Schülerkonten.
-
-**6) Admin: globale Verwaltung**
-- `GET /admin` zeigt Nutzer, Kurse und letzte Nachrichten.
-- `POST /admin/import-csv` erstellt Kurse bei Bedarf und importiert Nutzer (inkl. Rollen).
-- `GET /admin/download-created.csv` exportiert die zuletzt erzeugten Zugangsdaten.
-
-## CSV-Import (Admin)
-Im Admin-Bereich können Nutzer per CSV importiert werden. Format:
-
-```csv
-username,display_name,course,expires_at,password,role
-max.mustermann,Max Mustermann,FOS11,2026-01-31,max123!,student
-```
-
-- `expires_at` optional (YYYY-MM-DD). Leere Zelle = kein Ablauf.
-- `password` optional. Leer = zufälliges Passwort wird generiert und angezeigt.
-- `role` optional (default: `student`). Zulässig: `student`, `teacher`, `admin`.
-
-## Domain-Konfiguration (@-Teil)
-In `.env` können Sie konfigurieren, wie die angezeigte Mailadresse aufgebaut ist.
-
-Beispiel:
-`MAIL_DOMAIN_TEMPLATE={course}.meine-domain.de`
-
-Dann wird für Nutzer aus Kurs `FOS11` z.B. `max.mustermann@FOS11.meine-domain.de` angezeigt.
-
-Platzhalter:
-- `{course}` Kurs/Gruppe (falls leer, wird `default` eingesetzt)
-- `{domain}` Basisdomain (optional, wenn Sie stattdessen MAIL_DOMAIN setzen möchten)
-
-## Admin-Einsicht in alle Nachrichten
-Admins können über den Admin-Bereich **jede Nachricht** öffnen (inkl. aller Empfängerarten). Das ist für Unterrichtszwecke gedacht – bitte transparent kommunizieren.
+## Build-Routinen (Details)
+- `npm run build` erstellt einen frischen `./build`-Ordner, kopiert `src/`, Root-Dateien (README, LICENSE, package.json) und `data/` ohne `.db`.
+- `npm run start:build` startet den Build aus `./build`, setzt `FORCE_SETUP=1` und verwendet `./build/.env`.
+- Für produktive Deployments: `.env` manuell in `./build` anlegen oder mit `ENV_FILE` auf einen externen Pfad zeigen.
+- Optional: `INCLUDE_NODE_MODULES=1 npm run build` für vollständig autarke Builds.
 
 ## Sicherheitshinweise (Kurz)
 - Inhalte werden serverseitig mit `sanitize-html` bereinigt (XSS-Schutz).
-- Es gibt keine externen SMTP/IMAP-Funktionen. Nachrichten bleiben in der SQLite-Datenbank.
+- Es gibt keine SMTP/IMAP-Funktionen – alles bleibt lokal in der SQLite-DB.
 
 ## Lizenz
 MIT

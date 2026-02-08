@@ -1,7 +1,7 @@
 <%
   const pageTitle = (typeof mail !== 'undefined' && mail && mail.subject)
     ? mail.subject
-    : '(ohne Betreff)';
+    : t('message.no_subject');
 %>
 <%- include('partials/header', { title: pageTitle, me: me, extraHead: '' }) %>
 
@@ -10,6 +10,13 @@
 <%
   const isSender = me && mail && Number(me.id) === Number(mail.sender_id);
   const isStudent = me && me.role === 'student';
+  const mailboxFolder = (requestedFolder || folder || '').toUpperCase();
+  const canMarkUnread = (typeof showSidebar !== 'undefined' ? showSidebar : true) && mailboxFolder === 'INBOX';
+  const showReplyActions = !isDraftView;
+  const showReplyAll = !!canReplyAll;
+  const showEditDraft = !!isDraftView && mailboxFolder !== 'TRASH' && folder !== 'TRASH';
+  const showMoveToTrash = !!canMoveToTrash;
+  const showRestoreFromTrash = !!canRestoreFromTrash && !!restoreTarget;
 
   // Normal mail behavior:
   // - Recipients must never see who was BCC'ed.
@@ -19,56 +26,152 @@
   const ccList = [...(recipients.cc || [])];
   const bccList = [...(recipients.bcc || [])];
 
-  const showBccRow = !isStudent && (bccList.length > 0);
+  const showBccRow = !isStudent;
   const mergedToList = (isStudent && isSender) ? [...toList, ...bccList] : toList;
 %>
 
-<div class="columns is-variable is-6">
-      <!-- Main content -->
-      <div class="column is-8">
-        <div class="level mb-4">
-          <div class="level-left">
-            <div>
-              <h1 class="title is-3 mb-2"><%= mail.subject || '(ohne Betreff)' %></h1>
-              <p class="has-text-grey"><%= mail.created_at_local || mail.created_at || '' %></p>
-            </div>
-          </div>
-          <div class="level-right">
-            <div class="buttons">
-              <a class="button is-light" href="/compose?replyTo=<%= mail.id %>">Antworten</a>
-              <a class="button is-light" href="/compose?replyAllTo=<%= mail.id %>">Allen antworten</a>
-              <a class="button is-light" href="/compose?forward=<%= mail.id %>">Weiterleiten</a>
-              <a class="button is-light" href="/compose">Neu</a>
-            </div>
-          </div>
-        </div>
-
-        <div class="box">
-          <% 
-            // Prefer stored HTML, but strip script tags defensively.
-            const safeHtml = (mail && mail.body_html) ? String(mail.body_html).replace(/<script[\s\S]*?<\/script>/gi, '') : '';
-            const safeText = (mail && mail.body_text) ? String(mail.body_text) : '';
-          %>
-          <% if (safeHtml) { %>
-            <div class="content"><%- safeHtml %></div>
-          <% } else { %>
-            <div class="content" style="white-space: pre-wrap;"><%= safeText %></div>
-          <% } %>
-        </div>
-      </div>
-
-      <!-- Metadata -->
-      <div class="column is-4">
-        <div class="box">
-          <p><strong>Von:</strong> <%= mail.sender_display_name || mail.sender_email %></p>
-          <p><strong>An:</strong> <%= mergedToList.join(', ') || '—' %></p>
-          <p><strong>CC:</strong> <%= ccList.join(', ') || '—' %></p>
-          <% if (showBccRow) { %>
-            <p><strong>BCC:</strong> <%= bccList.join(', ') || '—' %></p>
-          <% } %>
-        </div>
+<div class="mail-view">
+  <div class="level mb-4 mail-view__header">
+    <div class="level-left">
+      <div>
+        <h1 class="title is-3 mb-2 mail-view__subject"><%= mail.subject || t('message.no_subject') %></h1>
+        <p class="has-text-grey"><%= mail.created_at_local || mail.created_at || '' %></p>
       </div>
     </div>
+    <div class="level-right mail-view__actions">
+      <div class="buttons">
+        <% if (showEditDraft) { %>
+          <a class="button is-light" href="/compose?draftId=<%= mail.id %>&folder=<%= mailboxFolder %>">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-edit-2-line" aria-hidden="true"></i></span>
+              <span><%= t('message.edit_draft') %></span>
+            </span>
+          </a>
+        <% } %>
+        <% if (showReplyActions) { %>
+          <a class="button is-light" href="/reply/<%= mail.id %>">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-reply-line" aria-hidden="true"></i></span>
+              <span><%= t('message.reply') %></span>
+            </span>
+          </a>
+          <% if (showReplyAll) { %>
+            <a class="button is-light" href="/reply-all/<%= mail.id %>">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-reply-all-line" aria-hidden="true"></i></span>
+                <span><%= t('message.reply_all') %></span>
+              </span>
+            </a>
+          <% } %>
+          <a class="button is-light" href="/forward/<%= mail.id %>">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-share-forward-line" aria-hidden="true"></i></span>
+              <span><%= t('message.forward') %></span>
+            </span>
+          </a>
+        <% } %>
+        <% if (showMoveToTrash) { %>
+          <form method="POST" action="/mail/<%= mail.id %>/trash">
+            <button class="button is-light" type="submit">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-delete-bin-line" aria-hidden="true"></i></span>
+                <span><%= t('message.move_trash') %></span>
+              </span>
+            </button>
+          </form>
+        <% } %>
+        <% if (showRestoreFromTrash) { %>
+          <form method="POST" action="/mail/<%= mail.id %>/restore">
+            <button class="button is-light" type="submit">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-inbox-unarchive-line" aria-hidden="true"></i></span>
+                <span><%= restoreTarget === 'INBOX' ? t('message.restore_inbox') : (restoreTarget === 'DRAFTS' ? t('message.restore_drafts') : t('message.restore_sent')) %></span>
+              </span>
+            </button>
+          </form>
+        <% } %>
+        <% if (canMarkUnread) { %>
+          <form method="POST" action="/mail/<%= mail.id %>/mark-unread?folder=<%= mailboxFolder %>">
+            <button class="button is-light" type="submit">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-mail-unread-line" aria-hidden="true"></i></span>
+                <span><%= t('message.mark_unread') %></span>
+              </span>
+            </button>
+          </form>
+        <% } %>
+        <a class="button is-light" href="/compose">
+          <span class="icon-text">
+            <span class="icon"><i class="ri-edit-2-line" aria-hidden="true"></i></span>
+            <span><%= t('message.new') %></span>
+          </span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="box mail-view__meta">
+    <div class="mail-view__meta-row">
+      <span class="mail-view__meta-label"><%= t('message.from_label') %></span>
+      <span class="mail-view__meta-value">
+        <%= mail.sender_display_name || '' %>
+        <% if (mail.sender_email) { %>
+          &lt;<%= mail.sender_email %>&gt;
+        <% } %>
+      </span>
+    </div>
+    <div class="mail-view__meta-row">
+      <span class="mail-view__meta-label"><%= t('message.to_label') %></span>
+      <span class="mail-view__meta-value"><%= mergedToList.join(', ') || t('common.none') %></span>
+    </div>
+    <div class="mail-view__meta-row">
+      <span class="mail-view__meta-label"><%= t('message.date_label') %></span>
+      <span class="mail-view__meta-value"><%= mail.created_at_local || mail.created_at || '' %></span>
+    </div>
+    <% const showDetails = (ccList.length > 0) || (showBccRow && bccList.length > 0); %>
+    <% if (showDetails) { %>
+      <details class="mail-view__meta-details">
+        <summary><%= t('message.details') %></summary>
+        <div class="mail-view__meta-row">
+          <span class="mail-view__meta-label"><%= t('common.cc') %></span>
+          <span class="mail-view__meta-value"><%= ccList.join(', ') || t('common.none') %></span>
+        </div>
+        <% if (showBccRow) { %>
+          <div class="mail-view__meta-row">
+            <span class="mail-view__meta-label"><%= t('common.bcc') %></span>
+            <span class="mail-view__meta-value"><%= bccList.join(', ') || t('common.none') %></span>
+          </div>
+        <% } %>
+      </details>
+    <% } %>
+  </div>
+
+  <div class="box mail-view__body">
+    <% if (attachments && attachments.length) { %>
+      <div class="mb-4">
+        <p class="has-text-weight-semibold"><%= t('message.attachments_title') %></p>
+        <ul>
+          <% attachments.forEach(att => { %>
+            <li>
+              <a href="/attachments/<%= att.id %>"><%= att.original_name %></a>
+              <span class="has-text-grey">(<%= att.size_label %>)</span>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+    <% 
+      // Prefer stored HTML, but strip script tags defensively.
+      const safeHtml = (mail && mail.body_html) ? String(mail.body_html).replace(/<script[\s\S]*?<\/script>/gi, '') : '';
+      const safeText = (mail && mail.body_text) ? String(mail.body_text) : '';
+    %>
+    <% if (safeHtml) { %>
+      <div class="content"><%- safeHtml %></div>
+    <% } else { %>
+      <div class="content" style="white-space: pre-wrap;"><%= safeText %></div>
+    <% } %>
+  </div>
+</div>
 </div>
 
 <%- include('partials/layout_end') %>

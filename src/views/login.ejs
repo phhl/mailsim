@@ -1,31 +1,42 @@
-<%- include('partials/header', { title: 'Login', me: null, extraHead: '' }) %>
+<%- include('partials/header', { title: t('login.title'), me: null, extraHead: '' }) %>
+<%- include('partials/layout_start', { showSidebar: false }) %>
 
 <div class="columns is-centered">
   <div class="column is-5">
     <div class="box">
-      <h1 class="title is-4">Login</h1>
+      <h1 class="title is-4">
+        <span class="icon-text">
+          <span class="icon"><i class="ri-login-box-line" aria-hidden="true"></i></span>
+          <span><%= t('login.heading') %></span>
+        </span>
+      </h1>
       <% if (error) { %>
         <div class="notification is-danger is-light"><%= error %></div>
       <% } %>
       <form method="post" action="/login">
         <div class="field">
-          <label class="label">Benutzername</label>
+          <label class="label"><%= t('login.username_or_email') %></label>
           <div class="control">
-            <input class="input" name="username" autocomplete="username" required />
+            <input class="input" name="username" autocomplete="username" placeholder="<%= t('login.username_placeholder') %>" required />
           </div>
         </div>
         <div class="field">
-          <label class="label">Passwort</label>
+          <label class="label"><%= t('login.password') %></label>
           <div class="control">
             <input class="input" type="password" name="password" autocomplete="current-password" required />
           </div>
         </div>
         <div class="field">
-          <button class="button is-link is-fullwidth">Anmelden</button>
+          <button class="button is-link is-fullwidth">
+            <span class="icon-text">
+              <span class="icon"><i class="ri-lock-line" aria-hidden="true"></i></span>
+              <span><%= t('login.submit') %></span>
+            </span>
+          </button>
         </div>
       </form>
     </div>
   </div>
 </div>
-
+<%- include('partials/layout_end', { showSidebar: false }) %>
 <%- include('partials/footer') %>

@@ -1,28 +1,52 @@
-# Codex Working Agreement
+﻿# Codex Working Agreement
 
-## High-level goal
-Keep the project easy to change safely: small modules, explicit dependencies, and minimal cross-cutting edits.
+## Ziel
+Änderungen sollen sicher und nachvollziehbar bleiben: klare Modulgrenzen, explizite Abhängigkeiten, wenig Querverbindungen.
 
-## Repo shape (do not collapse back to a monolith)
-- `src/server.js`: process entrypoint (only `app.listen`).
-- `src/app.js`: Express wiring (middleware + router registration + db init).
-- `src/routes/*`: route handlers, grouped by feature.
-- `src/services/*`: business logic and DB-facing helpers.
-- `src/utils/*`: pure utilities.
+## Repo-Struktur (nicht wieder zum Monolithen machen)
+- `src/server.js`: Entry-Point (nur `app.listen` bzw. Socket-Start).
+- `src/app.js`: Express-Wiring, Session/Locales, Schema-Checks/Migrationen.
+- `src/routes/*`: Feature-Router (Auth, Mail, Teacher, Admin, Schooladmin, Setup).
+- `src/services/*`: Geschäftslogik und DB-Helfer (Mail, Logs, Send-Window, Attachments).
+- `src/utils/*`: kleine, pure Helfer (Zeit, CSV, Parse, Name-Generator).
+- `src/lib/*`: Domain-spezifische Helfer (Adresse, Sanitizing).
+- `src/views/*`: EJS-Templates, Layout-Teile in `partials/`.
+- `src/public/assets/*`: statische Assets.
 
-## Editing rules
-1. When adding new endpoints, add them in a feature router under `src/routes/`.
-2. Keep DB queries local to a router or move them into `src/services/` if reused.
-3. Avoid hidden global state; pass `{ db }` into routers.
-4. Prefer small, testable functions over inlined multi-purpose blocks.
-5. When changing the data model, update `src/db/schema.sql` and keep it idempotent.
+## Editing-Regeln
+1. Neue Endpunkte immer in einem Feature-Router unter `src/routes/`.
+2. Wiederverwendete DB-Logik in `src/services/` kapseln.
+3. Keine versteckte globale State-Logik; `db` wird explizit übergeben.
+4. Kleine, testbare Funktionen bevorzugen; keine übergroßen Handler.
+5. Schema-Änderungen immer in `src/db/schema.sql` **und** im Startup-Pfad (`src/app.js`) berücksichtigen.
 
-## Naming conventions
-- Routers: `createXRouter({ db })` returning an `express.Router()`.
-- Services: functions that take `db` explicitly as first argument if they need it.
+## Datenbank & Migrationen
+- Schema ist idempotent; Startup führt ergänzende Migrationen aus.
+- Bei neuen Tabellen/Spalten: `schema.sql` anpassen **und** Migrationen in `app.js` ergänzen.
+- Transaktionen (`db.transaction`) bei Multi-Step Writes verwenden.
 
-## Common pitfalls to avoid
-- Do not call `app.listen(...)` anywhere except `src/server.js`.
-- Do not import routers from inside routers (avoid circular deps).
-- When formatting displayed email addresses, always use `lib/address.formatEmail(...)`.
+## Auth & Rollen
+- Auth-Guard: `middleware/auth.js` (`requireAuth`, `requireRole`).
+- Rollenregeln nicht im Template verstecken; Zugriff im Router prüfen.
 
+## Mail-Adressen/Logins
+- Immer `lib/address.formatEmail()` bzw. `formatLogin()` verwenden.
+- Kein eigenes String-Building für Mail-Adressen.
+
+## Attachments
+- Datei-Handling ausschließlich über `services/attachments.js`.
+- Pfade/Namen nie direkt aus User-Input bauen.
+
+## I18n
+- Texte über `req.t()` oder `res.locals.t()` holen.
+- Neue Keys in `src/locales/de.json` ergänzen.
+
+## UI/Views
+- Admin/Teacher/Schooladmin an `STYLE_GUIDE.md` orientieren.
+- Admin-Detailansichten ohne Sidebar (`showSidebar: false` via Layout).
+
+## Häufige Fehler vermeiden
+- Kein `app.listen(...)` außerhalb von `src/server.js`.
+- Keine Router-Imports innerhalb anderer Router (Zirkel vermeiden).
+- BCC-Logik nicht in Templates duplizieren; BCC-Sichtbarkeit nur zentral regeln.
+- Zeitstempel im UI via `utils/time.toBerlinLocal()` formatieren.

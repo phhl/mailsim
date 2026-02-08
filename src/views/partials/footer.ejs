@@ -1,2 +1,69 @@
+ <footer class="footer pt-2 pb-2">
+    <div class="content is-flex is-justify-content-space-between is-align-items-center">
+        <div><p class="mb-0">
+            <strong>MailSim (v1.0.0) – Didaktischer E-Mail-Simulator</strong> by
+            <a href="https://philipp.hoehle.eu" target="_blank">Philipp Höhle</a><br></p>
+            <p class="mb-0 footer__credits">
+            <a href="mailto:philipp.hoehle@sachsen-anhalt.de" target="_blank">Medienpädagogischer Berater</a>
+            des Landes Sachsen-Anhalt.
+            <a href="https://www.bildung-lsa.de/medienberatung" target="_blank">www.bildung-lsa.de/medienberatung</a><br/>
+            Lehrer an den Berufsbildenden Schulen "Otto Allendorff". <a href="https://www.bbs-oa.de" target="_blank">www.bbs-oa.de</a>
+        </p>
+        </div>
+        <p class="mb-0">        <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener"> <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" style="vertical-align:middle;">
+            </a><br/>
+             <a href="https://github.com/phhl/mailsim" target="_blank" rel="noopener">
+            <img src="https://img.shields.io/badge/GitHub-mailsim-181717?logo=github&style=flat" alt="GitHub Repository" style="vertical-align:middle;"></a>
+        </p>
+    </div>
+</footer>
+
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <script>
+    (function () {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+
+      const pickDuration = (el) => {
+        if (el.classList.contains('is-danger') || el.classList.contains('is-warning')) return 4500;
+        return 2500;
+      };
+
+      const toasts = Array.from(document.querySelectorAll('.notification[data-toast]'));
+      toasts.forEach((toast) => {
+        toast.classList.add('toast');
+        toast.setAttribute('role', 'alert');
+        container.appendChild(toast);
+        const duration = pickDuration(toast);
+        requestAnimationFrame(() => {
+          toast.classList.add('toast--show');
+        });
+        setTimeout(() => {
+          toast.classList.remove('toast--show');
+          toast.classList.add('toast--hide');
+        }, duration);
+        setTimeout(() => {
+          toast.remove();
+        }, duration + 500);
+      });
+    })();
+  </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.navbar-burger').forEach((burger) => {
+        const targetId = burger.dataset.target;
+        const target =
+          (targetId && document.getElementById(targetId)) ||
+          document.querySelector('.navbar-menu');
+        if (!target) return;
+
+        burger.addEventListener('click', () => {
+          const isActive = burger.classList.toggle('is-active');
+          target.classList.toggle('is-active', isActive);
+          burger.setAttribute('aria-expanded', isActive.toString());
+        });
+      });
+    });
+  </script>
 </body>
 </html>

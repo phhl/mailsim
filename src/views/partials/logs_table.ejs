@@ -1,0 +1,88 @@
+<% const base = basePath || ''; %>
+<% const logsEmpty = emptyMessage || t('common.no_entries'); %>
+<% const paramsBase = Object.assign({}, logsQuery || {}); %>
+
+<% if (!logs || !logs.length) { %>
+  <div class="notification is-light"><%= logsEmpty %></div>
+<% } else { %>
+  <div class="table-wrap table-wrap--logs">
+    <table class="table is-fullwidth is-hoverable logs-table">
+      <thead>
+        <tr>
+          <th><%= t('common.date') %></th>
+          <th><%= t('common.from') %></th>
+          <th><%= t('common.to_with_label') %></th>
+          <th><%= t('common.cc') %></th>
+          <th><%= t('common.bcc') %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% logs.forEach(l => { %>
+          <tr>
+            <td><%= l.created_at %></td>
+            <td><%= l.sender_name %> &lt;<%= l.sender_email %>&gt;</td>
+            <td><%= l.to || t('common.none') %></td>
+            <td><%= l.cc || t('common.none') %></td>
+            <td><%= l.bcc || t('common.none') %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <% if (logsPagination) { %>
+    <% const currentPage = logsPagination.page; %>
+    <% const totalPages = logsPagination.totalPages; %>
+    <% const prevPage = currentPage - 1; %>
+    <% const nextPage = currentPage + 1; %>
+    <% const startPage = Math.max(1, currentPage - 2); %>
+    <% const endPage = Math.min(totalPages, currentPage + 2); %>
+    <form method="get" action="<%= base %>" class="admin-filter" data-logs-form>
+      <div class="field is-grouped is-align-items-end">
+        <div class="control">
+          <label class="label"><%= t('common.entries_per_page') %></label>
+          <div class="select">
+            <select name="log_page_size" data-logs-page-size>
+              <% (logsPagination.pageSizes || []).forEach(size => { %>
+                <option value="<%= size %>" <%= size === logsPagination.pageSize ? 'selected' : '' %>><%= size %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+        <input type="hidden" name="log_page" value="<%= logsPagination.page %>">
+        <% Object.keys(paramsBase).forEach((key) => { %>
+          <input type="hidden" name="<%= key %>" value="<%= paramsBase[key] %>">
+        <% }) %>
+      </div>
+    </form>
+    <% if (totalPages > 1) { %>
+      <nav class="pagination is-centered mt-3" role="navigation" aria-label="pagination">
+        <% const prevParams = new URLSearchParams(Object.assign({}, paramsBase, { log_page: prevPage, log_page_size: logsPagination.pageSize })); %>
+        <% const nextParams = new URLSearchParams(Object.assign({}, paramsBase, { log_page: nextPage, log_page_size: logsPagination.pageSize })); %>
+        <a class="pagination-previous <%= currentPage <= 1 ? 'is-disabled' : '' %>" data-logs-link href="<%= currentPage <= 1 ? '#' : `${base}?${prevParams.toString()}` %>" aria-disabled="<%= currentPage <= 1 ? 'true' : 'false' %>"><%= t('common.prev') %></a>
+        <a class="pagination-next <%= currentPage >= totalPages ? 'is-disabled' : '' %>" data-logs-link href="<%= currentPage >= totalPages ? '#' : `${base}?${nextParams.toString()}` %>" aria-disabled="<%= currentPage >= totalPages ? 'true' : 'false' %>"><%= t('common.next') %></a>
+        <ul class="pagination-list">
+          <% if (startPage > 1) { %>
+            <% const firstParams = new URLSearchParams(Object.assign({}, paramsBase, { log_page: 1, log_page_size: logsPagination.pageSize })); %>
+            <li><a class="pagination-link" data-logs-link href="<%= `${base}?${firstParams.toString()}` %>">1</a></li>
+            <% if (startPage > 2) { %>
+              <li><span class="pagination-ellipsis">&hellip;</span></li>
+            <% } %>
+          <% } %>
+          <% for (let p = startPage; p <= endPage; p++) { %>
+            <% const pageParams = new URLSearchParams(Object.assign({}, paramsBase, { log_page: p, log_page_size: logsPagination.pageSize })); %>
+            <li>
+              <a class="pagination-link <%= p === currentPage ? 'is-current' : '' %>" data-logs-link href="<%= `${base}?${pageParams.toString()}` %>" <%= p === currentPage ? 'aria-current="page"' : '' %>><%= p %></a>
+            </li>
+          <% } %>
+          <% if (endPage < totalPages) { %>
+            <% if (endPage < totalPages - 1) { %>
+              <li><span class="pagination-ellipsis">&hellip;</span></li>
+            <% } %>
+            <% const lastParams = new URLSearchParams(Object.assign({}, paramsBase, { log_page: totalPages, log_page_size: logsPagination.pageSize })); %>
+            <li><a class="pagination-link" data-logs-link href="<%= `${base}?${lastParams.toString()}` %>"><%= totalPages %></a></li>
+          <% } %>
+        </ul>
+      </nav>
+    <% } %>
+  <% } %>
+<% } %>

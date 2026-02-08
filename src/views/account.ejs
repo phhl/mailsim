@@ -1,0 +1,63 @@
+<%- include('partials/header', { title: t('account.title'), me }) %>
+<%- include('partials/layout_start', { showSidebar: false }) %>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-7">
+        <div class="card">
+          <header class="card-header">
+            <p class="card-header-title">
+              <span class="icon-text">
+                <span class="icon"><i class="ri-user-settings-line" aria-hidden="true"></i></span>
+                <span><%= t('account.heading') %></span>
+              </span>
+            </p>
+          </header>
+          <div class="card-content">
+            <% if (error) { %>
+              <div class="notification is-danger is-light"><%= error %></div>
+            <% } %>
+            <% if (success) { %>
+              <div class="notification is-success is-light"><%= success %></div>
+            <% } %>
+
+            <form action="/account/password" method="post">
+              <div class="field">
+                <label class="label" for="current-password"><%= t('account.current_password') %></label>
+                <div class="control">
+                  <input id="current-password" class="input" type="password" name="current_password" autocomplete="current-password" required>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label" for="new-password"><%= t('account.new_password') %></label>
+                <div class="control">
+                  <input id="new-password" class="input" type="password" name="new_password" autocomplete="new-password" minlength="6" required>
+                </div>
+                <p class="help"><%= t('account.min_length') %></p>
+              </div>
+
+              <div class="field">
+                <label class="label" for="confirm-password"><%= t('account.confirm_password') %></label>
+                <div class="control">
+                  <input id="confirm-password" class="input" type="password" name="confirm_password" autocomplete="new-password" minlength="6" required>
+                </div>
+              </div>
+
+              <button class="button is-link" type="submit">
+                <span class="icon-text">
+                  <span class="icon"><i class="ri-save-3-line" aria-hidden="true"></i></span>
+                  <span><%= t('account.save') %></span>
+                </span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/layout_end', { showSidebar: false }) %>
+<%- include('partials/footer') %>
