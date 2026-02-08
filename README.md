@@ -7,7 +7,7 @@ Ziel: geschlossene Mail-Simulation für Unterricht (To/CC/BCC, Betreff, Posteing
 - Mailboxen mit **INBOX / SENT / DRAFTS / TRASH** inkl. Threading, Reply/Reply-All/Forward.
 - BCC-Sichtbarkeit steuerbar (Lehrkraft optional, Admin/Schuladmin immer).
 - Versandfenster pro Kurs inkl. optionaler **Anhang-Freigabe** für Schüler.
-- Anhänge mit Typ-Whitelist (PDF, PNG, JPEG, GIF, WebP, HEIC) und Größen-/Anzahl-Limits.
+- Anhänge mit Typ-Whitelist (PDF, PNG/JPEG, GIF, WebP, HEIC/HEIF) und Größen-/Anzahl-Limits.
 - Kurs-/Schulverwaltung, CSV-Import, Nutzer-Generator, Exporte (CSV/XLSX/PDF).
 - Protokollierung: Mail-Logs ohne Inhaltstext für Admin/Schuladmin.
 - I18n: Locale-Dateien unter `src/locales/` (Standard: `de`).
@@ -25,8 +25,8 @@ npm run dev
 Danach im Browser: http://localhost:3000
 
 ## Ersteinrichtung (Setup-Flow)
-Wenn Pflicht-Env-Keys fehlen, leitet die App auf `/setup` um.
-Dort werden Session-Secret und Admin-Zugang gesetzt und die `.env` aktualisiert.
+Wenn Pflicht-Env-Keys fehlen **oder** die DB/der Admin fehlt, leitet die App auf `/setup` um.
+Dort werden Session-Secret und Admin-Zugang gesetzt sowie Basis-Defaults (BCC-Sichtbarkeit, Lehrkraft-Create, Versandfenster-Minuten, Auto-Create-Limit, Name-API) gepflegt und die `.env` aktualisiert.
 
 ## Standard-Zugang (nach initdb)
 - Admin: `admin` / `admin123!` (bitte direkt ändern oder in `.env` anpassen)
@@ -42,15 +42,17 @@ Dort werden Session-Secret und Admin-Zugang gesetzt und die `.env` aktualisiert.
 - **Schuladmin**: `username@schule-domain` (z. B. `sa@alpha.edu`)
 - **Lehrkraft**: `username@schule-domain` (z. B. `t_a1@alpha.edu`)
 - **Schüler**: `username@kurs.schule-domain` (z. B. `s_a1_1@A1.alpha.edu`)
+Hinweis: **Admin** und **Schuladmin** können sich auch nur mit `username` (ohne @-Teil) anmelden.
 
 ## Konfiguration (.env)
-Wichtige Keys (siehe `.env.example`):
+Wichtige Keys (siehe `.env.example`, weitere optional möglich):
 - `PORT`, `SESSION_SECRET`, `REDIS_URL` (optional, sonst MemoryStore)
 - `DB_PATH` (Default: `./data/app.db`)
 - `SOCKET_PATH`, `SOCKET_MODE` (optional für Unix-Socket)
 - `DEFAULT_ADMIN_USER`, `DEFAULT_ADMIN_PASS` (nur für `initdb`)
 - `TEACHER_CAN_SEE_BCC` (0/1), `TEACHER_CAN_CREATE` (0/1)
 - `SEND_WINDOW_MINUTES` (Default-Dauer)
+- `TEACHER_AUTO_CREATE_MAX` (Limit pro Auto-Create-Lauf)
 - `ATTACHMENTS_DIR`, `ATTACHMENTS_MAX_MB`, `ATTACHMENTS_MAX_FILES`
 - `MAIL_DOMAIN_TEMPLATE`, `MAIL_DOMAIN` (Anzeige von Login/Adresse)
 - `DEFAULT_LOCALE` (z. B. `de`)
